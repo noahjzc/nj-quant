@@ -10,8 +10,7 @@ class PortfolioOptimizer:
     对策略参数进行网格搜索，找到历史表现最佳的参数组合
     """
 
-    def __init__(self, strategy_class, stock_codes, data_path, benchmark_index='sh000001'):
-        self.strategy_class = strategy_class
+    def __init__(self, stock_codes, data_path, benchmark_index='sh000001'):
         self.stock_codes = stock_codes
         self.data_path = data_path
         self.benchmark_index = benchmark_index
