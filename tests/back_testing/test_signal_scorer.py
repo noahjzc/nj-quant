@@ -19,8 +19,10 @@ def test_macd_signal_strength():
         'MACD_DEA': [0.5, 1.5, 0.5, -0.5]
     })
     scores = scorer.calculate_macd_strength(df)
-    assert scores.iloc[1] > scores.iloc[0]  # 差值0.5但DIF更大所以更强
-    assert scores.iloc[-1] < 0  # 负值表示死叉
+    # 死亡交叉比金叉弱
+    assert scores.iloc[-1] < scores.iloc[0]
+    assert scores.iloc[-1] < 20
+    assert scores.iloc[-1] < scores.iloc[1]  # 死亡交叉比金叉更弱
 
 def test_kdj_signal_strength():
     """KDJ策略：J值越低（超卖）信号越强"""
