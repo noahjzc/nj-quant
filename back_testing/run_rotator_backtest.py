@@ -48,6 +48,16 @@ def load_stock_price(stock_code: str, date: pd.Timestamp, data_path: str) -> flo
         return None
 
 
+def load_stock_data_batch(stock_codes: list, date: pd.Timestamp, data_path: str) -> dict:
+    """批量加载多只股票在指定日期的价格"""
+    prices = {}
+    for code in stock_codes:
+        price = load_stock_price(code, date, data_path)
+        if price:
+            prices[code] = price
+    return prices
+
+
 def run_backtest(start_date: str, end_date: str, initial_capital: float = INITIAL_CAPITAL):
     """运行回测"""
     print("=" * 60)
