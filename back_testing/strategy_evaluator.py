@@ -40,7 +40,7 @@ class StrategyEvaluator:
 
     def get_recent_trading_dates(self, reference_date: pd.Timestamp, weeks: int = 4) -> tuple:
         """获取最近N周的交易日范围"""
-        start_date = reference_date - timedelta(weeks=weeks * 7)
+        start_date = reference_date - timedelta(weeks=weeks)
         return start_date, reference_date
 
     def evaluate_strategy(self, strategy_name: str, weeks: int = 4,
