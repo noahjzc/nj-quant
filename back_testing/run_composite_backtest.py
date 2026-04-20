@@ -20,6 +20,13 @@ DATA_PATH = None  # 默认为 project_root/data/daily_ycz
 INITIAL_CAPITAL = 1000000.0
 N_STOCKS = 5
 
+# Exit reason display map
+EXIT_REASON_MAP = {
+    'stop_loss': '止损触发',
+    'take_profit': '止盈触发',
+    'trailing_stop': '移动止损触发'
+}
+
 # Risk Manager configuration
 RISK_CONFIG = {
     'atr_period': 14,
@@ -160,12 +167,7 @@ def check_daily_risk_exits(
                 buy_price = position['buy_price']
                 profit_pct = (current_price - buy_price) / buy_price * 100
                 profit_str = f"+{profit_pct:.1f}%" if profit_pct >= 0 else f"{profit_pct:.1f}%"
-                reason_map = {
-                    'stop_loss': '止损触发',
-                    'take_profit': '止盈触发',
-                    'trailing_stop': '移动止损触发'
-                }
-                reason_display = reason_map.get(exit_result['action'], exit_result['action'])
+                reason_display = EXIT_REASON_MAP.get(exit_result['action'], exit_result['action'])
                 print(f"    [风险止损] {stock_code} 触发{reason_display}: {exit_result['reason']}")
 
         except Exception as e:
@@ -209,6 +211,7 @@ def run_backtest(start_date: str, end_date: str, initial_capital: float = INITIA
     total_cost = 0  # 累计交易成本
     exit_records = []  # 记录止损/止盈触发的交易
     rotation_sell_records = []  # 记录调仓卖出的交易
+    buy_count = 0  # 买入次数（调仓产生的买入）
 
     weekly_results = []
 
@@ -257,12 +260,7 @@ def run_backtest(start_date: str, end_date: str, initial_capital: float = INITIA
                                     'return': profit_pct
                                 })
                                 profit_str = f"+{profit_pct*100:.1f}%" if profit_pct >= 0 else f"{profit_pct*100:.1f}%"
-                                reason_map = {
-                                    'stop_loss': '止损触发',
-                                    'take_profit': '止盈触发',
-                                    'trailing_stop': '移动止损触发'
-                                }
-                                reason_display = reason_map.get(exit_result['action'], exit_result['action'])
+                                reason_display = EXIT_REASON_MAP.get(exit_result['action'], exit_result['action'])
                                 print(f"    卖出: {stock_code} {shares}股 @ {price:.2f}")
                                 print(f"      买入价: {buy_price:.2f}")
                                 print(f"      盈亏: {profit_str}")
@@ -354,6 +352,7 @@ def run_backtest(start_date: str, end_date: str, initial_capital: float = INITIA
                                 'buy_price': price,
                                 'highest_price': price  # 初始化最高价
                             }
+                            buy_count += 1
                             cash -= (cost + buy_cost)
                             total_cost += buy_cost
                             print(f"  买入: {code} {shares}股 @ {price:.2f} (手续费: {buy_cost:.2f})")
@@ -405,7 +404,6 @@ def run_backtest(start_date: str, end_date: str, initial_capital: float = INITIA
 
     # 汇总所有交易记录
     all_trades = exit_records + rotation_sell_records
-    buy_count = 0  # 买入次数（调仓产生的买入）
     sell_count = len(all_trades)  # 卖出次数
 
     # 统计盈利/亏损
@@ -431,7 +429,7 @@ def run_backtest(start_date: str, end_date: str, initial_capital: float = INITIA
     print("\n" + "=" * 50)
     print("交易统计")
     print("=" * 50)
-    print(f"总买入次数: {len(fridays) - 1}")  # 初始买入后每次调仓都会买入
+    print(f"总买入次数: {buy_count}")
     print(f"总卖出次数: {sell_count}")
     print(f"盈利次数: {profitable_count}")
     print(f"亏损次数: {losing_count}")
