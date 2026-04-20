@@ -74,12 +74,8 @@ class RiskManager:
             trailing_start=self.trailing启动条件
         )
 
-        # 过滤掉internal字段，只返回spec定义的字段
-        return {
-            'action': result.get('action'),
-            'price': result.get('price'),
-            'reason': result.get('reason')
-        }
+        # 返回所有字段，包括take_profit_hit标志
+        return result
 
     def calculate_position_size(self, total_capital: float, current_price: float,
                                 existing_positions: float) -> int:

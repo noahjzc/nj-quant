@@ -338,10 +338,11 @@ def run_backtest(start_date: str, end_date: str, initial_capital: float = INITIA
                 price = prices.get(code) if code in prices else data_provider.get_stock_price(code, friday)
                 if price and price > 0:
                     # 使用风险管理器计算买入数量
+                    # 新买入的股票不在持仓中，existing_positions为0
                     shares = risk_manager.calculate_position_size(
                         total_capital=cash + existing_value,
                         current_price=price,
-                        existing_positions=existing_value / price if price > 0 else 0
+                        existing_positions=0
                     )
                     if shares > 0:
                         cost = shares * price
