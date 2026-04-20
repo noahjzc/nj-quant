@@ -1,6 +1,12 @@
 """
 策略轮动量化选股系统 - 回测入口
 """
+import sys
+import io
+
+# 设置控制台输出为UTF-8
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
 import argparse
 import pandas as pd
 import numpy as np
