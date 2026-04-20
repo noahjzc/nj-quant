@@ -93,10 +93,12 @@ def run_backtest(start_date: str, end_date: str, initial_capital: float = INITIA
 
         # 计算持仓价值
         stock_values = {}
+        target_value = portfolio_value / N_STOCKS  # 每只股票目标市值
+
         for code in rotator.current_stocks:
             price = prices.get(code)
             if price:
-                shares = int(portfolio_value / N_STOCKS / price)
+                shares = int(target_value / price)
                 stock_values[code] = shares * price
             else:
                 stock_values[code] = 0
