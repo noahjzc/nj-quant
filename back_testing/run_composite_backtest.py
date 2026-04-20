@@ -157,7 +157,16 @@ def check_daily_risk_exits(
 
             if exit_result['action'] is not None:
                 sell_list.append((stock_code, exit_result))
-                print(f"    [风险止损] {stock_code} 触发{exit_result['action']}: {exit_result['reason']}")
+                buy_price = position['buy_price']
+                profit_pct = (current_price - buy_price) / buy_price * 100
+                profit_str = f"+{profit_pct:.1f}%" if profit_pct >= 0 else f"{profit_pct:.1f}%"
+                reason_map = {
+                    'stop_loss': '止损触发',
+                    'take_profit': '止盈触发',
+                    'trailing_stop': '移动止损触发'
+                }
+                reason_display = reason_map.get(exit_result['action'], exit_result['action'])
+                print(f"    [风险止损] {stock_code} 触发{reason_display}: {exit_result['reason']}")
 
         except Exception as e:
             # 如果出错，跳过这只股票（不强制卖出）
@@ -199,6 +208,7 @@ def run_backtest(start_date: str, end_date: str, initial_capital: float = INITIA
     holdings = {}  # 持仓 {stock_code: {'shares': int, 'buy_price': float, 'highest_price': float}}
     total_cost = 0  # 累计交易成本
     exit_records = []  # 记录止损/止盈触发的交易
+    rotation_sell_records = []  # 记录调仓卖出的交易
 
     weekly_results = []
 
@@ -215,48 +225,51 @@ def run_backtest(start_date: str, end_date: str, initial_capital: float = INITIA
             daily_date = prev_friday + timedelta(days=1)
             while daily_date < friday:
                 if holdings:
-                    # 获取当日价格
-                    for stock_code in list(holdings.keys()):
-                        current_price = data_provider.get_stock_price(stock_code, daily_date)
-                        if current_price and current_price > 0:
-                            # 更新最高价
-                            if 'highest_price' not in holdings[stock_code]:
-                                holdings[stock_code]['highest_price'] = holdings[stock_code]['buy_price']
-                            if current_price > holdings[stock_code]['highest_price']:
-                                holdings[stock_code]['highest_price'] = current_price
+                    # 检查每日风险退出（止损/止盈/移动止损）
+                    sell_list = check_daily_risk_exits(
+                        data_provider=data_provider,
+                        risk_manager=risk_manager,
+                        holdings=holdings,
+                        date=daily_date,
+                        atr_period=risk_config['atr_period']
+                    )
+
+                    # 立即执行风险触发卖出
+                    for stock_code, exit_result in sell_list:
+                        if stock_code in holdings:
+                            buy_price = holdings[stock_code]['buy_price']
+                            price = data_provider.get_stock_price(stock_code, daily_date)
+                            if price and price > 0:
+                                shares = holdings[stock_code]['shares']
+                                revenue = shares * price
+                                cost = calculate_transaction_cost(revenue, is_buy=False)
+                                profit_pct = (price - buy_price) / buy_price
+                                cash += revenue - cost
+                                total_cost += cost
+                                exit_records.append({
+                                    'date': daily_date,
+                                    'stock': stock_code,
+                                    'action': exit_result['action'],
+                                    'price': price,
+                                    'shares': shares,
+                                    'buy_price': buy_price,
+                                    'reason': exit_result['reason'],
+                                    'return': profit_pct
+                                })
+                                profit_str = f"+{profit_pct*100:.1f}%" if profit_pct >= 0 else f"{profit_pct*100:.1f}%"
+                                reason_map = {
+                                    'stop_loss': '止损触发',
+                                    'take_profit': '止盈触发',
+                                    'trailing_stop': '移动止损触发'
+                                }
+                                reason_display = reason_map.get(exit_result['action'], exit_result['action'])
+                                print(f"    卖出: {stock_code} {shares}股 @ {price:.2f}")
+                                print(f"      买入价: {buy_price:.2f}")
+                                print(f"      盈亏: {profit_str}")
+                                print(f"      原因: {reason_display}")
+                                del holdings[stock_code]
 
                 daily_date += timedelta(days=1)
-
-            # 检查止损/止盈触发（使用上周五结算价）
-            sell_list = check_daily_risk_exits(
-                data_provider=data_provider,
-                risk_manager=risk_manager,
-                holdings=holdings,
-                date=prev_friday,
-                atr_period=risk_config['atr_period']
-            )
-
-            # 执行风险触发卖出
-            for stock_code, exit_result in sell_list:
-                if stock_code in holdings:
-                    price = data_provider.get_stock_price(stock_code, prev_friday)
-                    if price and price > 0:
-                        shares = holdings[stock_code]['shares']
-                        revenue = shares * price
-                        cost = calculate_transaction_cost(revenue, is_buy=False)
-                        cash += revenue - cost
-                        total_cost += cost
-                        exit_records.append({
-                            'date': prev_friday,
-                            'stock': stock_code,
-                            'action': exit_result['action'],
-                            'price': price,
-                            'shares': shares,
-                            'reason': exit_result['reason'],
-                            'return': (price - holdings[stock_code]['buy_price']) / holdings[stock_code]['buy_price']
-                        })
-                        print(f"    [风险卖出] {stock_code} {shares}股 @ {price:.2f} (手续费: {cost:.2f})")
-                        del holdings[stock_code]
 
         # 执行每周流程（选股）
         result = rotator.run_weekly(friday)
@@ -287,12 +300,28 @@ def run_backtest(start_date: str, end_date: str, initial_capital: float = INITIA
             price = prices.get(code) if code in prices else data_provider.get_stock_price(code, friday)
             if code in holdings:
                 if price and price > 0:
+                    buy_price = holdings[code]['buy_price']
                     shares = holdings[code]['shares']
                     revenue = shares * price
                     cost = calculate_transaction_cost(revenue, is_buy=False)
+                    profit_pct = (price - buy_price) / buy_price
                     cash += revenue - cost
                     total_cost += cost
-                    print(f"  卖出: {code} {shares}股 @ {price:.2f} (手续费: {cost:.2f})")
+                    rotation_sell_records.append({
+                        'date': friday,
+                        'stock': code,
+                        'action': 'rotation',
+                        'price': price,
+                        'shares': shares,
+                        'buy_price': buy_price,
+                        'reason': '调仓卖出',
+                        'return': profit_pct
+                    })
+                    profit_str = f"+{profit_pct*100:.1f}%" if profit_pct >= 0 else f"{profit_pct*100:.1f}%"
+                    print(f"  卖出: {code} {shares}股 @ {price:.2f}")
+                    print(f"    买入价: {buy_price:.2f}")
+                    print(f"    盈亏: {profit_str}")
+                    print(f"    原因: 调仓")
                 else:
                     # 无法获取价格，报错并移除持仓（防止累积）
                     print(f"  警告: 无法获取 {code} 的价格，清除持仓")
@@ -374,11 +403,47 @@ def run_backtest(start_date: str, end_date: str, initial_capital: float = INITIA
     print(f"累计交易成本: {total_cost:,.2f}")
     print(f"调仓次数: {len(fridays)}")
 
-    # 打印风险触发记录
-    if exit_records:
-        print(f"\n风险触发记录: {len(exit_records)}次")
-        df_exits = pd.DataFrame(exit_records)
-        print(df_exits.to_string(index=False))
+    # 汇总所有交易记录
+    all_trades = exit_records + rotation_sell_records
+    buy_count = 0  # 买入次数（调仓产生的买入）
+    sell_count = len(all_trades)  # 卖出次数
+
+    # 统计盈利/亏损
+    profitable_trades = [t for t in all_trades if t['return'] > 0]
+    losing_trades = [t for t in all_trades if t['return'] <= 0]
+    profitable_count = len(profitable_trades)
+    losing_count = len(losing_trades)
+    win_rate = (profitable_count / sell_count * 100) if sell_count > 0 else 0
+
+    # 平均收益率
+    avg_return = (sum(t['return'] for t in all_trades) / len(all_trades) * 100) if all_trades else 0
+
+    # 最大单笔盈利/亏损
+    max_profit = (max(t['return'] for t in all_trades) * 100) if all_trades else 0
+    max_loss = (min(t['return'] for t in all_trades) * 100) if all_trades else 0
+
+    # 止损/止盈/移动止损触发次数
+    stop_loss_count = len([t for t in exit_records if t['action'] == 'stop_loss'])
+    take_profit_count = len([t for t in exit_records if t['action'] == 'take_profit'])
+    trailing_stop_count = len([t for t in exit_records if t['action'] == 'trailing_stop'])
+
+    # 打印交易统计
+    print("\n" + "=" * 50)
+    print("交易统计")
+    print("=" * 50)
+    print(f"总买入次数: {len(fridays) - 1}")  # 初始买入后每次调仓都会买入
+    print(f"总卖出次数: {sell_count}")
+    print(f"盈利次数: {profitable_count}")
+    print(f"亏损次数: {losing_count}")
+    print(f"胜率: {win_rate:.1f}%")
+    print(f"平均收益率: {avg_return:+.1f}%")
+    print(f"最大单笔盈利: {max_profit:+.1f}%")
+    print(f"最大单笔亏损: {max_loss:+.1f}%")
+    print(f"总止损次数: {stop_loss_count}")
+    print(f"总止盈次数: {take_profit_count}")
+    print(f"移动止损触发: {trailing_stop_count}")
+    print(f"累计交易成本: {total_cost:,.2f}")
+    print("=" * 50)
 
     output_path = f"back_testing/results/composite_{start_date}_{end_date}_{time.time()}.csv"
     df_weeks.to_csv(output_path, index=False)
