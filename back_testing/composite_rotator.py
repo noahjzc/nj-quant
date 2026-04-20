@@ -38,7 +38,7 @@ class CompositeRotator:
         self.current_stocks = selected
         return selected
 
-    def rebalance(self, date: pd.Timestamp) -> dict:
+    def rebalance(self, date: pd.Timestamp, prices: dict = None) -> dict:
         """执行调仓"""
         rebalance_detail = {
             'date': date,
@@ -57,20 +57,25 @@ class CompositeRotator:
         for code in self.current_stocks:
             if code not in self.current_positions:
                 rebalance_detail['buy_stocks'].append(code)
+                # 计算实际持仓份额
+                if prices and code in prices and prices[code] > 0:
+                    shares = int(self.per_stock_capital / prices[code])
+                else:
+                    shares = 0
                 self.current_positions[code] = {
-                    'shares': 0,
-                    'buy_price': 0
+                    'shares': shares,
+                    'buy_price': prices.get(code, 0) if prices else 0
                 }
 
         return rebalance_detail
 
-    def run_weekly(self, date: pd.Timestamp) -> dict:
+    def run_weekly(self, date: pd.Timestamp, prices: dict = None) -> dict:
         """执行每周流程"""
         # 筛选股票
         self.select_stocks(date)
 
         # 执行调仓
-        rebalance = self.rebalance(date)
+        rebalance = self.rebalance(date, prices)
 
         return {
             'date': date,
