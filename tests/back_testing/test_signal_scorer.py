@@ -31,3 +31,24 @@ def test_kdj_signal_strength():
     scores = scorer.calculate_kdj_strength(df)
     assert scores.iloc[0] > scores.iloc[1]  # J=5最强
     assert scores.iloc[-1] < scores.iloc[0]  # J=100最弱
+
+def test_rsi_improved_signal():
+    """RSI改进信号：超卖程度 + 反弹动量"""
+    scorer = SignalScorer()
+    # 模拟RSI数据：超卖后反弹
+    df = pd.DataFrame({
+        'rsi1': [20, 25, 30, 35, 40],  # 从超卖区域反弹
+    })
+    scores = scorer.calculate_rsi_improved(df)
+    # RSI=20时最强（超卖最严重）
+    assert scores.iloc[0] > scores.iloc[2]  # 反弹中
+
+def test_kdj_improved_signal():
+    """KDJ改进信号：超卖程度 + 反弹动量"""
+    scorer = SignalScorer()
+    df = pd.DataFrame({
+        'KDJ_J': [5, 10, 20, 50, 80],  # 从超卖区域反弹
+    })
+    scores = scorer.calculate_kdj_improved(df)
+    # J=5时最强（超卖最严重）
+    assert scores.iloc[0] > scores.iloc[1]

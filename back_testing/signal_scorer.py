@@ -59,6 +59,41 @@ class SignalScorer:
         strength = (ma_strength * 0.6 + rsi_confirm * 0.4)
         return strength.clip(0, 100)
 
+    def calculate_rsi_improved(self, df: pd.DataFrame) -> pd.Series:
+        """
+        RSI改进信号强度：超卖程度 + 反弹动量
+        - 超卖程度：RSI < 30时，越低越强
+        - 反弹动量：RSI转头向上的幅度
+        """
+        rsi = df['rsi1'].fillna(50)
+        rsi_prev = df['rsi1'].shift(1).fillna(50)
+
+        # 超卖程度：RSI < 30时，越低越强
+        oversold = (30 - rsi.clip(0, 30)) / 30  # 0-1之间，30时为0，0时为1
+
+        # 反弹动量：RSI上升幅度
+        momentum = (rsi - rsi_prev).clip(0, 100) / 100  # 0-1之间
+
+        # 综合得分：超卖程度×0.6 + 反弹动量×0.4
+        strength = (oversold * 0.6 + momentum * 0.4) * 100
+        return strength.clip(0, 100)
+
+    def calculate_kdj_improved(self, df: pd.DataFrame) -> pd.Series:
+        """
+        KDJ改进信号强度：超卖程度 + 反弹动量
+        """
+        j = df['KDJ_J'].fillna(50)
+        j_prev = df['KDJ_J'].shift(1).fillna(50)
+
+        # 超卖程度：J < 20时越低越强
+        oversold = (20 - j.clip(0, 20)) / 20  # 0-1之间
+
+        # 反弹动量：J值上升幅度
+        momentum = (j - j_prev).clip(0, 100) / 100
+
+        strength = (oversold * 0.6 + momentum * 0.4) * 100
+        return strength.clip(0, 100)
+
     def get_signal_strength(self, strategy_name: str, df: pd.DataFrame) -> pd.Series:
         """根据策略名称获取信号强度"""
         strength_map = {
