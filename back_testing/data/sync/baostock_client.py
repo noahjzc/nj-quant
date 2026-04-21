@@ -8,6 +8,9 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+# 主要指数代码
+INDEX_CODES = ['sh000001', 'sh000300', 'sz399001', 'sz399006']  # 上证, 沪深300, 深证, 创业板
+
 
 class BaostockClient:
     """baostock API 封装，提供数据获取接口"""
@@ -37,6 +40,13 @@ class BaostockClient:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._logout()
         return False
+
+    @staticmethod
+    def _format_date(date_str: str) -> str:
+        """转换日期格式 YYYYMMDD -> YYYY-MM-DD"""
+        if date_str and len(date_str) == 8:
+            return f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+        return date_str
 
     def get_stock_list(self) -> pd.DataFrame:
         """
@@ -94,13 +104,17 @@ class BaostockClient:
 
         Args:
             stock_code: 股票代码，如 sh600519
-            start_date: 开始日期，格式 YYYYMMDD
-            end_date: 结束日期，格式 YYYYMMDD
+            start_date: 开始日期，格式 YYYYMMDD 或 YYYY-MM-DD
+            end_date: 结束日期，格式 YYYYMMDD 或 YYYY-MM-DD
 
         Returns:
             DataFrame with columns: stock_code, trade_date, open, high, low, close, volume, turnover, amplitude, change_pct, is_trading
         """
         self._ensure_login()
+
+        # 转换日期格式 YYYYMMDD -> YYYY-MM-DD
+        start_date = self._format_date(start_date)
+        end_date = self._format_date(end_date)
 
         # baostock 需要 sh.600519 格式
         bs_code = f"{stock_code[:2]}.{stock_code[2:]}"
@@ -164,6 +178,10 @@ class BaostockClient:
         """
         self._ensure_login()
 
+        # 转换日期格式 YYYYMMDD -> YYYY-MM-DD
+        start_date = self._format_date(start_date)
+        end_date = self._format_date(end_date)
+
         # baostock 格式
         bs_code = f"{index_code[:2]}.{index_code[2:]}"
 
@@ -217,6 +235,10 @@ class BaostockClient:
             end_year: 结束年份
         """
         self._ensure_login()
+
+        # 转换年份为日期格式
+        start_date = f"{start_year}-01-01" if start_year else None
+        end_date = f"{end_year}-12-31" if end_year else None
 
         # baostock 格式
         bs_code = f"{stock_code[:2]}.{stock_code[2:]}"

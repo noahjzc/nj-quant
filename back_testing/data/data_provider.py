@@ -22,7 +22,7 @@ from typing import Optional, Union
 import pandas as pd
 
 from back_testing.data.db.connection import get_engine, get_session
-from back_testing.data.db.models import StockDaily, StockMeta
+from back_testing.data.db.models import StockDaily, StockMeta, IndexDaily
 
 
 class DataProvider:
@@ -52,11 +52,12 @@ class DataProvider:
         else:
             self.use_parquet = True
             if data_dir is None:
-                project_root = Path(__file__).parent.parent
+                project_root = Path(__file__).parent.parent.parent
                 self.data_dir = project_root / 'data' / 'daily_ycz'
+                self.csv_dir = project_root / 'data' / 'metadata' / 'daily_ycz'
             else:
                 self.data_dir = Path(data_dir)
-            self.csv_dir = Path(r'D:\workspace\code\mine\quant\data\metadata\daily_ycz')
+                self.csv_dir = Path(data_dir).parent / 'metadata' / 'daily_ycz'
 
     def _get_from_db(
         self,
@@ -250,11 +251,23 @@ class DataProvider:
 
 # 全局默认实例
 _default_provider: Optional[DataProvider] = None
+_provider_lock = __import__('threading').Lock()
 
 
 def get_provider() -> DataProvider:
-    """获取默认数据提供器（单例）"""
+    """获取默认数据提供器（单例，线程安全）"""
     global _default_provider
-    if _default_provider is None:
-        _default_provider = DataProvider(use_db=True)
-    return _default_provider
+    with _provider_lock:
+        if _default_provider is None:
+            _default_provider = DataProvider(use_db=True)
+        return _default_provider
+
+
+def close_provider():
+    """关闭默认数据提供器"""
+    global _default_provider
+    with _provider_lock:
+        if _default_provider is not None:
+            from back_testing.data.db.connection import close_session
+            close_session()
+            _default_provider = None

@@ -4,3 +4,6 @@
 data/*
 .venvLibsite-packages
 back_testing/results/*
+
+# Database configuration (contains credentials)
+back_testing/config/database.ini
