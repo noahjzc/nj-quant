@@ -12,8 +12,11 @@ import numpy as np
 from datetime import datetime, timedelta
 from back_testing.composite_rotator import CompositeRotator
 from back_testing.data_provider import DataProvider
+from back_testing.index_data_provider import IndexDataProvider
+from back_testing.performance_analyzer import PerformanceAnalyzer
 from back_testing.risk_manager import RiskManager
 from back_testing.stop_loss_strategies import StopLossStrategies
+from back_testing.visualizer import PerformanceVisualizer
 
 # Parquet数据目录
 DATA_PATH = None  # 默认为 project_root/data/daily_ycz
@@ -37,6 +40,9 @@ RISK_CONFIG = {
     'max_position_pct': 0.20,
     'max_total_pct': 0.90,
 }
+
+# Index data directory
+INDEX_DATA_DIR = r'D:\workspace\code\mine\quant\data\metadata\daily_ycz\index'
 
 
 def get_trading_fridays(start_date: str, end_date: str) -> list:
@@ -191,6 +197,9 @@ def run_backtest(start_date: str, end_date: str, initial_capital: float = INITIA
     # 创建数据提供器
     data_provider = DataProvider(data_dir=DATA_PATH, use_parquet=True)
 
+    # 创建指数数据提供器
+    index_provider = IndexDataProvider(INDEX_DATA_DIR)
+
     # 初始化风险管理器
     risk_config = RISK_CONFIG.copy()
     risk_config['total_capital'] = initial_capital
@@ -204,6 +213,9 @@ def run_backtest(start_date: str, end_date: str, initial_capital: float = INITIA
 
     fridays = get_trading_fridays(start_date, end_date)
     print(f"\n调仓日数量: {len(fridays)}")
+
+    # 计算基准收益
+    benchmark_return = index_provider.get_index_return('sh000001', start_date, end_date)
 
     # 初始状态
     cash = initial_capital  # 现金
@@ -443,6 +455,47 @@ def run_backtest(start_date: str, end_date: str, initial_capital: float = INITIA
     print(f"移动止损触发: {trailing_stop_count}")
     print(f"累计交易成本: {total_cost:,.2f}")
     print("=" * 50)
+
+    # 集成绩效分析
+    all_trades = exit_records + rotation_sell_records
+    analyzer = PerformanceAnalyzer(
+        trades=all_trades,
+        initial_capital=initial_capital,
+        benchmark_index='sh000001'
+    )
+    metrics = analyzer.calculate_metrics()
+
+    print("\n" + "=" * 50)
+    print("绩效分析")
+    print("=" * 50)
+    print(f"绝对收益:")
+    print(f"  总收益率: {metrics['total_return']:+.2%}")
+    print(f"  年化收益率: {metrics['annual_return']:+.2%}")
+    print(f"  最大回撤: {metrics['max_drawdown']:+.2%}")
+    print(f"\n风险调整收益:")
+    print(f"  Sharpe比率: {metrics['sharpe_ratio']:.2f}")
+    print(f"  Calmar比率: {metrics['calmar_ratio']:.2f}")
+    print(f"  Sortino比率: {metrics['sortino_ratio']:.2f}")
+    print(f"\n相对收益 (vs 沪深300):")
+    print(f"  基准收益: {benchmark_return:+.2%}")
+    print(f"  超额收益: {metrics['total_return'] - benchmark_return:+.2%}")
+    print(f"\n交易分析:")
+    print(f"  胜率: {metrics['win_rate']:.1%}")
+    print(f"  盈亏比: {metrics['profit_loss_ratio']:.2f}")
+    print("=" * 50)
+
+    # 生成可视化报告
+    try:
+        df_weeks['portfolio_value_normalized'] = df_weeks['portfolio_value'] / df_weeks['portfolio_value'].iloc[0]
+        equity_curve = df_weeks.set_index('date')['portfolio_value_normalized']
+        benchmark_data = index_provider.get_index_data('sh000001', start_date, end_date)
+        benchmark_data['normalized'] = benchmark_data['close'] / benchmark_data['close'].iloc[0]
+        benchmark_curve = benchmark_data.set_index('date')['normalized']
+        visualizer = PerformanceVisualizer(equity_curve, benchmark_curve)
+        report_path = visualizer.generate_report(all_trades, save_dir='back_testing/results')
+        print(f"\n绩效报告已生成: {report_path}")
+    except Exception as e:
+        print(f"\n生成报告失败: {e}")
 
     output_path = f"back_testing/results/composite_{start_date}_{end_date}_{time.time()}.csv"
     df_weeks.to_csv(output_path, index=False)
