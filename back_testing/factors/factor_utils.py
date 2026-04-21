@@ -30,19 +30,28 @@ class FactorProcessor:
 
     @staticmethod
     def z_score(series: pd.Series) -> pd.Series:
-        """Z-score standardization (mean=0, std=1).
+        """Z-score standardization normalized to [0, 1] range.
+
+        Computes z-scores (mean=0, std=1) and then normalizes to [0, 1]
+        using min-max scaling for consistency with rank_percentile output.
 
         Args:
             series: Input data series.
 
         Returns:
-            Series with mean ~0 and std ~1.
+            Series with values normalized to [0, 1] range.
         """
         mean = series.mean()
         std = series.std()
         if std == 0 or pd.isna(std):
             return pd.Series(np.zeros(len(series)), index=series.index)
-        return (series - mean) / std
+        z = (series - mean) / std
+        # Normalize to [0, 1] range for consistency with rank_percentile
+        z_min = z.min()
+        z_max = z.max()
+        if z_max == z_min:
+            return pd.Series(np.zeros(len(series)), index=series.index)
+        return (z - z_min) / (z_max - z_min)
 
     @staticmethod
     def winsorize(series: pd.Series, lower: float = 0.05, upper: float = 0.95) -> pd.Series:
@@ -58,14 +67,17 @@ class FactorProcessor:
         """
         lower_bound = series.quantile(lower)
         upper_bound = series.quantile(upper)
-        return series.clip(lower=lower_bound, upper=upper_bound)
+        # Convert to float first to avoid FutureWarning from clip downcasting
+        return series.astype(float).clip(lower=lower_bound, upper=upper_bound)
 
     @staticmethod
     def neutralize(series: pd.Series, market_cap: pd.Series) -> pd.Series:
         """Market neutralization via regression residual.
 
-        Regresses the factor on market cap and returns the residual,
-        making the factor orthogonal to market cap.
+        Regresses the factor on log(market cap) and returns the residual,
+        making the factor orthogonal to market cap. Using log(market cap)
+        is standard quant practice as market cap typically has a log-normal
+        distribution.
 
         Args:
             series: Factor values to neutralize.
@@ -79,8 +91,9 @@ class FactorProcessor:
         if len(common_idx) == 0:
             return series.copy()
 
-        y = series.loc[common_idx].values
-        x = market_cap.loc[common_idx].values
+        y = series.loc[common_idx].values.astype(float)
+        # Use log(market cap) - standard quant practice
+        x = np.log(market_cap.loc[common_idx].values)
 
         # Add constant for intercept: y = alpha + beta * x + residual
         # Using least squares: (X'X)^-1 * X'y
@@ -100,7 +113,7 @@ class FactorProcessor:
         result = pd.Series(residual, index=common_idx)
 
         # Preserve original index and fill missing with original values
-        full_result = series.copy()
+        full_result = series.astype(float).copy()
         full_result.loc[common_idx] = result
 
         return full_result

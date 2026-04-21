@@ -23,11 +23,12 @@ def test_rank_percentile_descending():
 
 
 def test_z_score():
-    """Test z-score standardization."""
+    """Test z-score standardization normalized to [0, 1] range."""
     data = pd.Series([10, 20, 30, 40, 50])
     result = FactorProcessor.z_score(data)
-    assert abs(result.mean()) < 1e-10, f"Mean should be ~0, got {result.mean()}"
-    assert abs(result.std() - 1.0) < 1e-10, f"Std should be ~1, got {result.std()}"
+    assert result.min() == 0.0, f"Min should be 0, got {result.min()}"
+    assert result.max() == 1.0, f"Max should be 1, got {result.max()}"
+    assert abs(result.mean() - 0.5) < 1e-10, f"Mean should be ~0.5, got {result.mean()}"
 
 
 def test_z_score_with_nan():
@@ -48,8 +49,8 @@ def test_winsorize():
     # 0.95 * 8 = 7.6 -> interpolates between index 7 and 8
     # upper bound = 50 + 0.6 * (100 - 50) = 50 + 30 = 80
     # After winsorize: [-80, -50, 0, 10, 20, 30, 40, 50, 80]
-    assert result.min() == -80, f"Min should be -80, got {result.min()}"
-    assert result.max() == 80, f"Max should be 80, got {result.max()}"
+    assert result.min() == pytest.approx(-80), f"Min should be -80, got {result.min()}"
+    assert result.max() == pytest.approx(80), f"Max should be 80, got {result.max()}"
     # Middle values should be unchanged
     assert result.iloc[3] == 10, f"Value at index 3 should be 10, got {result.iloc[3]}"
 
@@ -95,11 +96,11 @@ def test_process_factor_rank():
 
 
 def test_process_factor_zscore():
-    """Test full pipeline with zscore method."""
+    """Test full pipeline with zscore method normalized to [0, 1]."""
     data = pd.Series([10, 20, 30, 40, 50])
     result = FactorProcessor.process_factor(data, method='zscore')
-    assert abs(result.mean()) < 1e-10, f"Mean should be ~0, got {result.mean()}"
-    assert abs(result.std() - 1.0) < 1e-10, f"Std should be ~1, got {result.std()}"
+    assert result.min() == 0.0, f"Min should be 0, got {result.min()}"
+    assert result.max() == 1.0, f"Max should be 1, got {result.max()}"
 
 
 def test_process_factor_winsorize_applied():
