@@ -11,39 +11,13 @@
 import argparse
 import logging
 import sys
-import os
 from datetime import date, datetime, timedelta
-
-# ============================================================
-# 重要：在导入 akshare 之前清除代理设置
-# 否则 akshare 内部会继承系统代理导致连接失败
-# ============================================================
-# 清除所有可能的代理环境变量
-for key in ['http_proxy', 'https_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'no_proxy', 'NO_PROXY']:
-    os.environ.pop(key, None)
-# 显式设置为空字符串（确保 requests 不使用代理）
-os.environ['http_proxy'] = ''
-os.environ['https_proxy'] = ''
-os.environ['HTTP_PROXY'] = ''
-os.environ['HTTPS_PROXY'] = ''
-
-# 设置 requests 库的代理为 None
-import requests
-requests.trust_env = False
-# 清空 session 的代理
-s = requests.Session()
-s.trust_env = False
-s.proxies = {'http': None, 'https': None}
-
-# 设置 urllib3 禁用代理
-import urllib3
-urllib3.disable_warnings()
 
 sys.path.insert(0, str(__file__).rsplit('back_testing', 1)[0])
 
 from back_testing.data.db.connection import get_session
 from back_testing.data.db.models import StockDaily, StockMeta, IndexDaily
-from back_testing.data.sync.akshare_client import AkshareClient
+from back_testing.data.sync.baostock_client import BaostockClient
 
 logging.basicConfig(
     level=logging.INFO,
@@ -55,7 +29,7 @@ logger = logging.getLogger(__name__)
 class DailyUpdater:
     """每日数据更新器"""
 
-    def __init__(self, client: AkshareClient):
+    def __init__(self, client: BaostockClient):
         self.client = client
         self.Session = get_session()
 
@@ -246,17 +220,17 @@ def main():
                         help='持仓股票列表，逗号分隔，如 sh600519,sh600036')
     args = parser.parse_args()
 
-    client = AkshareClient(rate_limit=10)
-    updater = DailyUpdater(client)
+    with BaostockClient() as client:
+        updater = DailyUpdater(client)
 
-    if args.mode == 'intraday':
-        portfolio = args.portfolio.split(',') if args.portfolio else []
-        if not portfolio:
-            logger.error("盘中模式需要指定 --portfolio 参数")
-            sys.exit(1)
-        updater.run_intraday(portfolio)
-    else:
-        updater.run_close()
+        if args.mode == 'intraday':
+            portfolio = args.portfolio.split(',') if args.portfolio else []
+            if not portfolio:
+                logger.error("盘中模式需要指定 --portfolio 参数")
+                sys.exit(1)
+            updater.run_intraday(portfolio)
+        else:
+            updater.run_close()
 
 
 if __name__ == '__main__':
