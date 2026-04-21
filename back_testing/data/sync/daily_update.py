@@ -18,11 +18,26 @@ from datetime import date, datetime, timedelta
 # 重要：在导入 akshare 之前清除代理设置
 # 否则 akshare 内部会继承系统代理导致连接失败
 # ============================================================
-for key in ['http_proxy', 'https_proxy', 'HTTP_PROXY', 'HTTPS_PROXY']:
+# 清除所有可能的代理环境变量
+for key in ['http_proxy', 'https_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'no_proxy', 'NO_PROXY']:
     os.environ.pop(key, None)
-# 确保 requests 不使用代理
+# 显式设置为空字符串（确保 requests 不使用代理）
+os.environ['http_proxy'] = ''
+os.environ['https_proxy'] = ''
+os.environ['HTTP_PROXY'] = ''
+os.environ['HTTPS_PROXY'] = ''
+
+# 设置 requests 库的代理为 None
 import requests
 requests.trust_env = False
+# 清空 session 的代理
+s = requests.Session()
+s.trust_env = False
+s.proxies = {'http': None, 'https': None}
+
+# 设置 urllib3 禁用代理
+import urllib3
+urllib3.disable_warnings()
 
 sys.path.insert(0, str(__file__).rsplit('back_testing', 1)[0])
 
