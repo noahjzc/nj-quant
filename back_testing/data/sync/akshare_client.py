@@ -1,4 +1,5 @@
 """akshare API 封装层"""
+import os
 import time
 import logging
 from datetime import date, datetime, timedelta
@@ -6,6 +7,7 @@ from typing import List, Optional
 
 import akshare as ak
 import pandas as pd
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -13,18 +15,48 @@ logger = logging.getLogger(__name__)
 class AkshareClient:
     """akshare API 封装，提供限流和错误处理"""
 
-    def __init__(self, rate_limit: int = 10, retry_times: int = 3, timeout: int = 30):
+    def __init__(self, rate_limit: int = 10, retry_times: int = 3, timeout: int = 30, disable_proxy: bool = True):
         """
         Args:
             rate_limit: 每秒请求数限制
             retry_times: 重试次数
             timeout: 超时秒数
+            disable_proxy: 是否禁用代理（默认 True，解决代理连接问题）
         """
         self.rate_limit = rate_limit
         self.retry_times = retry_times
         self.timeout = timeout
         self._min_interval = 1.0 / rate_limit
         self._last_request_time = 0.0
+        self._disable_proxy = disable_proxy
+
+        # 保存原始代理设置
+        self._original_http_proxy = os.environ.get('http_proxy')
+        self._original_https_proxy = os.environ.get('https_proxy')
+        self._original_http_proxy = os.environ.get('HTTP_PROXY', self._original_http_proxy)
+        self._original_https_proxy = os.environ.get('HTTPS_PROXY', self._original_https_proxy)
+
+        # 禁用代理以解决连接问题
+        if disable_proxy:
+            self._disable_proxies()
+
+    def _disable_proxies(self):
+        """禁用代理设置"""
+        for key in ['http_proxy', 'https_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'no_proxy', 'NO_PROXY']:
+            os.environ.pop(key, None)
+        # 确保 requests 使用无代理 session
+        if hasattr(requests, 'Session'):
+            # 全局禁用
+            requests.session().trust_env = False
+
+    def _restore_proxies(self):
+        """恢复原始代理设置"""
+        if self._original_http_proxy:
+            os.environ['http_proxy'] = self._original_http_proxy
+            os.environ['HTTP_PROXY'] = self._original_http_proxy
+        if self._original_https_proxy:
+            os.environ['https_proxy'] = self._original_https_proxy
+            os.environ['HTTPS_PROXY'] = self._original_https_proxy
 
     def _rate_limit_wait(self):
         """等待直到可以发送请求"""
@@ -39,6 +71,9 @@ class AkshareClient:
         for attempt in range(self.retry_times):
             try:
                 self._rate_limit_wait()
+                # 再次确保代理被禁用
+                if self._disable_proxy:
+                    self._disable_proxies()
                 return func(*args, **kwargs)
             except Exception as e:
                 last_error = e
