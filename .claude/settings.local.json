@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git commit -m:*)",
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(pip install:*)",
+      "Bash(.venv\\\\Scripts\\\\pip.exe install:*)",
+      "Bash(.venv\\\\Scripts\\\\python.exe -c:*)",
+      "Bash(.venv\\\\Scripts\\\\python.exe -m pip install:*)",
+      "Bash(.venv/Scripts/python -m pytest:*)",
+      "Bash(cmd:*)",
+      "Bash(ls:*)",
+      "Bash(xargs cat:*)",
+      "Bash(xargs grep:*)",
+      "Bash(xargs tail:*)",
+      "Bash(grep:*)",
+      "Bash(chardetect:*)",
+      "Bash(read f:*)",
+      "WebSearch",
+      "Skill(update-config)",
+      "Bash(rm -f test_equity.png test_drawdown.png test_equity_with_benchmark.png test_drawdown2.png test_return_dist.png)",
+      "Bash(rm -rf test_report_dir)",
+      "Bash(mv strategies/bollinger_strategy.py strategies/)",
+      "Bash(mv strategies/kdj_strategy.py strategies/)",
+      "Bash(mv strategies/ma_strategy.py strategies/)",
+      "Bash(mv strategies/macd_strategy.py strategies/)",
+      "Bash(mv strategies/multi_rsi_strategy.py strategies/)",
+      "Bash(mkdir -p \"D:/workspace/code/mine/quant/nj-quant/back_testing/factors\")",
+      "Bash(mkdir -p \"D:/workspace/code/mine/quant/nj-quant/tests/back_testing\")"
+    ],
+    "defaultMode": "auto"
+  }
+}

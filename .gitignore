@@ -1,2 +1,6 @@
 # created by virtualenv automatically
 .idea
+
+data/*
+.venvLibsite-packages
+back_testing/results/*
