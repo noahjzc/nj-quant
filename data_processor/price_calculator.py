@@ -21,13 +21,13 @@ class PriceCalculator:
         :param df:
         :return:
         """
+
         df[PREVIOUS_CLOSE_PRICE] = df[CLOSE_PRICE].shift(1)
         df[PREVIOUS_POST_ADJUSTED_CLOSE_PRICE] = df[POST_ADJUSTED_CLOSE_PRICE].shift(1)
         df[PREVIOUS_PRE_ADJUSTED_CLOSE_PRICE] = df[PRE_ADJUSTED_CLOSE_PRICE].shift(1)
+
         return df
 
     @staticmethod
     def calculate_adjusted_price(df: DataFrame):
-
-
         return df

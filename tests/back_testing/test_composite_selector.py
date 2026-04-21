@@ -1,5 +1,5 @@
 import pytest
-from back_testing.composite_selector import CompositeSelector
+from back_testing.selectors.composite_selector import CompositeSelector
 import pandas as pd
 
 def test_select_top_stocks():

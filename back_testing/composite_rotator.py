@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from back_testing.composite_selector import CompositeSelector
+from back_testing.selectors.composite_selector import CompositeSelector
 from back_testing.composite_scorer import CompositeScorer
 
 class CompositeRotator:

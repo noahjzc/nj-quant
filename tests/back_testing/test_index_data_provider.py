@@ -1,6 +1,6 @@
 import pytest
 import pandas as pd
-from back_testing.index_data_provider import IndexDataProvider
+from back_testing.data.index_data_provider import IndexDataProvider
 
 
 def test_get_index_data():

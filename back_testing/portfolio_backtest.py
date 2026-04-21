@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from back_testing.backtest_engine import BacktestEngine
+from back_testing.core.backtest_engine import BacktestEngine
 
 class PortfolioBacktest:
     """
@@ -8,12 +8,13 @@ class PortfolioBacktest:
     每天选股，等权分配资金，回测整个组合表现
     """
 
-    def __init__(self, strategy_class, stock_pool, data_path, initial_capital=1000000.0):
+    def __init__(self, strategy_class, stock_pool, data_path, initial_capital=1000000.0, start_date=None):
         self.strategy_class = strategy_class
         self.stock_pool = stock_pool  # List of (code, name, industry)
         self.data_path = data_path
         self.initial_capital = initial_capital
         self.per_stock_capital = initial_capital / len(stock_pool)
+        self.start_date = start_date
 
     def run(self):
         """运行组合回测"""
@@ -22,7 +23,8 @@ class PortfolioBacktest:
             engine = self.strategy_class(
                 stock_code=code,
                 data_path=self.data_path,
-                initial_capital=self.per_stock_capital
+                initial_capital=self.per_stock_capital,
+                start_date=self.start_date
             )
             result = engine.run()
             results.append(result)

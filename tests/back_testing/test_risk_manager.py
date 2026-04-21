@@ -1,5 +1,5 @@
 import pytest
-from back_testing.risk_manager import RiskManager
+from back_testing.risk.risk_manager import RiskManager
 
 
 class TestRiskManager:

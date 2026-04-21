@@ -1,5 +1,5 @@
 import pytest
-from back_testing.stock_selector import StockSelector
+from back_testing.selectors.stock_selector import StockSelector
 import pandas as pd
 
 def test_select_top_stocks():

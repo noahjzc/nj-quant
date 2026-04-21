@@ -1,5 +1,5 @@
 import pytest
-from back_testing.position_manager import PositionManager
+from back_testing.risk.position_manager import PositionManager
 
 
 class TestPositionManager:

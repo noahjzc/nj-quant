@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from back_testing.strategy_evaluator import StrategyEvaluator, STRATEGY_MAP
-from back_testing.stock_selector import StockSelector
+from back_testing.selectors.stock_selector import StockSelector
 from back_testing.signal_scorer import SignalScorer
 
 

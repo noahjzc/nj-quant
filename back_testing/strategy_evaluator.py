@@ -1,16 +1,17 @@
 import pandas as pd
 import numpy as np
 from datetime import timedelta
-from back_testing.backtest_engine import BacktestEngine
-from back_testing.ma_strategy import MAStrategy
-from back_testing.macd_strategy import MACDStrategy
-from back_testing.rsi_strategy import RSIReversalStrategy
-from back_testing.combined_strategy import CombinedStrategy
-from back_testing.bollinger_strategy import BollingerStrategy, BollingerStrictStrategy
-from back_testing.kdj_strategy import KDJOversoldStrategy, KDJGoldenCrossStrategy
-from back_testing.multi_rsi_strategy import MultiPeriodRSIStrategy, RSIReversalMultiStrategy
-from back_testing.trend_confirmation_strategy import TrendConfirmationStrategy, TrendPullbackStrategy
-from back_testing.volume_strategy import VolumeAnomalyStrategy, VolumeMAConfirmStrategy
+from back_testing.core.backtest_engine import BacktestEngine
+from back_testing.strategies.ma_strategy import MAStrategy
+from back_testing.strategies.macd_strategy import MACDStrategy
+from back_testing.strategies.rsi_strategy import RSIReversalStrategy
+from back_testing.strategies.combined_strategy import CombinedStrategy
+from back_testing.strategies.bollinger_strategy import BollingerStrategy, BollingerStrictStrategy
+from back_testing.strategies.kdj_strategy import KDJOversoldStrategy, KDJGoldenCrossStrategy
+from back_testing.strategies.multi_rsi_strategy import MultiPeriodRSIStrategy, RSIReversalMultiStrategy
+from back_testing.strategies.trend_confirmation_strategy import TrendConfirmationStrategy, TrendPullbackStrategy
+from back_testing.strategies.volume_strategy import VolumeAnomalyStrategy, VolumeMAConfirmStrategy
+from back_testing.data.data_provider import DataProvider
 
 STRATEGY_MAP = {
     'MAStrategy': MAStrategy,
@@ -33,9 +34,9 @@ STRATEGY_MAP = {
 class StrategyEvaluator:
     """策略评估器：评估各策略过去N周的表现"""
 
-    def __init__(self, stock_codes: list, data_path: str, initial_capital: float = 100000.0):
+    def __init__(self, stock_codes: list, data_path: str = None, initial_capital: float = 100000.0, use_parquet: bool = True):
         self.stock_codes = stock_codes
-        self.data_path = data_path
+        self.data_provider = DataProvider(data_dir=data_path, use_parquet=use_parquet)
         self.initial_capital = initial_capital
 
     def get_recent_trading_dates(self, reference_date: pd.Timestamp, weeks: int = 4) -> tuple:
