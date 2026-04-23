@@ -6,64 +6,70 @@
 
 # 默认因子配置
 DEFAULT_FACTOR_CONFIG = {
-    # 估值因子（低估值好）
-    'PB': {
-        'weight': 0.15,
-        'direction': -1,
-        'description': '市净率，越低越好'
-    },
-    'PE_TTM': {
-        'weight': 0.10,
-        'direction': -1,
-        'description': '市盈率TTM，越低越好'
-    },
-    'PS_TTM': {
-        'weight': 0.05,
-        'direction': -1,
-        'description': '市销率TTM，越低越好'
-    },
-
     # 动量因子（强势好）
     'RSI_1': {
-        'weight': 0.15,
+        'weight': 0.20,
         'direction': 1,
         'description': 'RSI短期，偏强好'
     },
-    'KDJ_K': {
+    'RSI_2': {
+        'weight': 0.10,
+        'direction': 1,
+        'description': 'RSI中期，偏强好'
+    },
+    'RSI_3': {
         'weight': 0.05,
         'direction': 1,
+        'description': 'RSI长期，偏强好'
+    },
+    'KDJ_K': {
+        'weight': 0.15,
+        'direction': 1,
         'description': 'KDJ随机K，强势好'
+    },
+    'KDJ_D': {
+        'weight': 0.05,
+        'direction': 1,
+        'description': 'KDJ随机D，强势好'
     },
 
     # 趋势因子（趋势向上好）
     'MA_5': {
-        'weight': 0.05,
+        'weight': 0.15,
         'direction': 1,
         'description': '5日均线偏多'
     },
+    'MA_10': {
+        'weight': 0.10,
+        'direction': 1,
+        'description': '10日均线偏多'
+    },
     'MA_20': {
-        'weight': 0.05,
+        'weight': 0.10,
         'direction': 1,
         'description': '20日均线偏多'
     },
-
-    # 交易因子（活跃但不过度）
-    'TURNOVER': {
+    'MA_30': {
         'weight': 0.10,
         'direction': 1,
-        'description': '换手率，活跃好'
-    },
-    'VOLUME_RATIO': {
-        'weight': 0.05,
-        'direction': 1,
-        'description': '量比，放量好'
+        'description': '30日均线偏多'
     },
 
-    # 波动因子（低波动稳健）
-    'AMPLITUDE': {
+    # 新增动量因子
+    'RET_20': {
+        'weight': 0.10,
+        'direction': 1,
+        'description': '20日价格动量，越强越好'
+    },
+    'RET_60': {
+        'weight': 0.10,
+        'direction': 1,
+        'description': '60日价格动量，越强越好'
+    },
+    'LN_MCAP': {
         'weight': 0.05,
         'direction': -1,
-        'description': '振幅，低波动好'
+        'description': '对数市值，越小越好'
     },
 }
 
