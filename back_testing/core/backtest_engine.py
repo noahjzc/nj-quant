@@ -17,10 +17,11 @@ class BacktestEngine:
     TRANSFER_FEE = 0.00002  # 过户费：买卖都收取，0.002%
     BROKERAGE = 0.0003     # 券商佣金：买卖都收取，0.03%，最低5元
 
-    def __init__(self, stock_code: str, data_path: str = None, initial_capital: float = 100000.0, benchmark_index: str = None,
-                 stop_loss: float = None, take_profit: float = None, start_date: str = None, use_parquet: bool = True):
+    def __init__(self, stock_code: str, initial_capital: float = 100000.0, benchmark_index: str = None,
+                 stop_loss: float = None, take_profit: float = None, start_date: str = None,
+                 data_path: str = None):
         self.stock_code = stock_code
-        self.data_path = data_path
+        self.data_path = data_path  # 用于加载基准指数数据
         self.initial_capital = initial_capital
         self.data: DataFrame = None
         self.trades: list = []
@@ -35,22 +36,21 @@ class BacktestEngine:
         self.take_profit = take_profit  # e.g., 0.20 means 20% take profit
         self.buy_price = None  # 持仓买入价格，用于计算浮动盈亏
         self.start_date = pd.to_datetime(start_date) if start_date else None  # 回测开始日期
-        self.use_parquet = use_parquet
 
         # 创建数据提供器
-        self.data_provider = DataProvider(data_dir=data_path, use_parquet=use_parquet)
+        self.data_provider = DataProvider()
 
     def load_data(self) -> DataFrame:
         """加载股票数据"""
         df = self.data_provider.get_stock_data(self.stock_code)
 
-        # 按日期排序
-        df = df.sort_values('交易日期')
-        df = df.reset_index(drop=True)
+        # trade_date is the index, sort by it
+        df = df.sort_index()
 
-        # 按开始日期筛选
+        # 按开始日期筛选（使用索引）
         if self.start_date:
-            df = df[df['交易日期'] >= self.start_date]
+            start_ts = pd.Timestamp(self.start_date)
+            df = df[df.index >= start_ts]
 
         self.data = df
         return df
@@ -68,8 +68,8 @@ class BacktestEngine:
             index_df = index_df.sort_values('date').reset_index(drop=True)
 
             # 获取回测区间的指数数据
-            start_date = self.data.iloc[0]['交易日期']
-            end_date = self.data.iloc[-1]['交易日期']
+            start_date = self.data.iloc[0]['trade_date']
+            end_date = self.data.iloc[-1]['trade_date']
 
             index_df = index_df[(index_df['date'] >= start_date) & (index_df['date'] <= end_date)]
 
@@ -124,15 +124,15 @@ class BacktestEngine:
         """模拟交易"""
         df = self.data
 
-        # 重置索引以确保可以使用iloc
-        df = df.reset_index(drop=True)
+        # 重置索引以确保可以使用iloc，同时保留trade_date作为列
+        df = df.reset_index()
 
         # 记录初始组合市值
-        self.portfolio_value_history = [(pd.Timestamp(df.iloc[0]['交易日期']), self.initial_capital)]
+        self.portfolio_value_history = [(pd.Timestamp(df.iloc[0]['trade_date']), self.initial_capital)]
 
         for i in range(len(df)):
             signal = df.loc[i, 'TRADE_SIGNAL']
-            price = df.loc[i, '后复权价']  # 使用后复权价计算
+            price = df.loc[i, 'adj_close']  # 使用后复权价计算
 
             # Check stop loss / take profit
             if self.position and self.buy_price is not None:
@@ -156,7 +156,7 @@ class BacktestEngine:
                 self.buy_price = price
 
                 self.trades.append({
-                    'date': df.loc[i, '交易日期'],
+                    'date': df.loc[i, 'trade_date'],
                     'action': 'BUY',
                     'price': price,
                     'shares': self.shares,
@@ -181,7 +181,7 @@ class BacktestEngine:
                 take_profit_triggered = self.take_profit is not None and unrealized_pnl >= self.take_profit
 
                 self.trades.append({
-                    'date': df.loc[i, '交易日期'],
+                    'date': df.loc[i, 'trade_date'],
                     'action': 'SELL',
                     'price': price,
                     'shares': self.shares,
@@ -200,18 +200,18 @@ class BacktestEngine:
                 portfolio_value = self.current_capital + self.shares * price
             else:
                 portfolio_value = self.current_capital
-            self.portfolio_value_history.append((df.loc[i, '交易日期'], portfolio_value))
+            self.portfolio_value_history.append((df.loc[i, 'trade_date'], portfolio_value))
 
         # 如果最后还持仓，按最后价格平仓
         if self.position:
-            price = df.iloc[-1]['后复权价']
+            price = df.iloc[-1]['adj_close']
             revenue = self.shares * price
             sell_cost = self.calculate_transaction_cost(revenue, is_buy=False)
             self.total_costs += sell_cost
             self.current_capital += (revenue - sell_cost)
             profit_ratio = (revenue - sell_cost - self.buy_price * self.shares) / (self.buy_price * self.shares)
             self.trades.append({
-                'date': df.iloc[-1]['交易日期'],
+                'date': df.iloc[-1]['trade_date'],
                 'action': 'SELL',
                 'price': price,
                 'shares': self.shares,
@@ -231,8 +231,8 @@ class BacktestEngine:
 
         # 计算年化收益率
         if len(self.data) > 0:
-            start_date = self.data.iloc[0]['交易日期']
-            end_date = self.data.iloc[-1]['交易日期']
+            start_date = self.data.index[0]
+            end_date = self.data.index[-1]
             days = (end_date - start_date).days
             years = days / 365 if days > 0 else 1
             annual_return = (1 + total_return) ** (1 / years) - 1 if years > 0 else 0
@@ -266,8 +266,8 @@ class BacktestEngine:
             'total_costs': self.total_costs,
             'benchmark_return': self.benchmark_return,
             'trades': self.trades,
-            'start_date': self.data.iloc[0]['交易日期'] if len(self.data) > 0 else None,
-            'end_date': self.data.iloc[-1]['交易日期'] if len(self.data) > 0 else None,
+            'start_date': self.data.index[0] if len(self.data) > 0 else None,
+            'end_date': self.data.index[-1] if len(self.data) > 0 else None,
         }
 
     def calculate_max_drawdown(self) -> float:

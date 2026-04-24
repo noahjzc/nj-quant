@@ -1,5 +1,6 @@
 from pandas import DataFrame
 from back_testing.core.backtest_engine import BacktestEngine
+from data_column_names import MA_5, MA_20
 import numpy as np
 
 
@@ -17,8 +18,8 @@ class MAStrategy(BacktestEngine):
         """生成MA均线交易信号"""
         df = self.data.copy()
 
-        ma5_col = 'MA_5'
-        ma20_col = 'MA_20'
+        ma5_col = MA_5
+        ma20_col = MA_20
 
         # 金叉：MA5上穿MA20
         golden_cross = (df[ma5_col] > df[ma20_col]) & (df[ma5_col].shift(1) <= df[ma20_col].shift(1))

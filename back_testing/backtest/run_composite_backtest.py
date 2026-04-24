@@ -4,7 +4,7 @@
 import sys
 import io
 import time
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', line_buffering=True)
 
 import argparse
 import pandas as pd
@@ -18,8 +18,8 @@ from back_testing.risk.risk_manager import RiskManager
 from back_testing.risk.stop_loss_strategies import StopLossStrategies
 from back_testing.analysis.visualizer import PerformanceVisualizer
 
-# Parquet数据目录
-DATA_PATH = None  # 默认为 project_root/data/daily_ycz
+# Parquet数据目录（已废弃，数据现在从DB读取）
+DATA_PATH = None
 INITIAL_CAPITAL = 1000000.0
 N_STOCKS = 5
 
@@ -33,10 +33,10 @@ EXIT_REASON_MAP = {
 # Risk Manager configuration
 RISK_CONFIG = {
     'atr_period': 14,
-    'stop_loss_mult': 2.0,
-    'take_profit_mult': 3.0,
-    'trailing_pct': 0.10,
-    'trailing启动条件': 0.05,
+    'stop_loss_mult': 1.5,      # 调整：止损2.0太松，1.0太紧
+    'take_profit_mult': 2.5,    # 原: 3.0，降低止盈阈值
+    'trailing_pct': 0.05,      # 原: 0.10，收紧移动止损
+    'trailing启动条件': 0.03,   # 原: 0.05，更早启动
     'max_position_pct': 0.20,
     'max_total_pct': 0.90,
 }
@@ -195,7 +195,7 @@ def run_backtest(start_date: str, end_date: str, initial_capital: float = INITIA
     print("=" * 60)
 
     # 创建数据提供器
-    data_provider = DataProvider(data_dir=DATA_PATH, use_parquet=True)
+    data_provider = DataProvider()
 
     # 创建指数数据提供器
     index_provider = IndexDataProvider(INDEX_DATA_DIR)
@@ -206,7 +206,6 @@ def run_backtest(start_date: str, end_date: str, initial_capital: float = INITIA
     risk_manager = RiskManager(config=risk_config)
 
     rotator = CompositeRotator(
-        data_path=DATA_PATH,
         initial_capital=initial_capital,
         n_stocks=N_STOCKS
     )

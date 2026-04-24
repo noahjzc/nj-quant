@@ -22,7 +22,8 @@ class FactorProcessor:
         """
         n = len(series)
         if n <= 1:
-            return pd.Series(np.zeros(n), index=series.index)
+            # Single element gets neutral score of 0.5
+            return pd.Series([0.5] * n, index=series.index)
 
         rank = series.rank(method='average', ascending=ascending)
         # Convert to 0-based percentile: (rank - 1) / (n - 1)
@@ -92,29 +93,36 @@ class FactorProcessor:
             return series.copy()
 
         y = series.loc[common_idx].values.astype(float)
-        # Use log(market cap) - standard quant practice
-        x = np.log(market_cap.loc[common_idx].values)
+        market_cap_vals = market_cap.loc[common_idx].values
+
+        # Filter out invalid market cap values (zero or negative)
+        valid_mask = (market_cap_vals > 0) & np.isfinite(market_cap_vals)
+        if valid_mask.sum() < 2:
+            return series.copy()
+
+        y_valid = y[valid_mask]
+        x_valid = np.log(market_cap_vals[valid_mask])
 
         # Add constant for intercept: y = alpha + beta * x + residual
         # Using least squares: (X'X)^-1 * X'y
-        X = np.column_stack([np.ones(len(x)), x])
+        X = np.column_stack([np.ones(len(x_valid)), x_valid])
         # Solve normal equation: X'X * beta = X'y
         # beta = (X'X)^-1 * X'y
         XtX = X.T @ X
-        Xty = X.T @ y
+        Xty = X.T @ y_valid
         beta = np.linalg.solve(XtX, Xty)
 
         # Predicted: alpha + beta * x
-        predicted = beta[0] + beta[1] * x
+        predicted = beta[0] + beta[1] * x_valid
 
         # Residual = actual - predicted
-        residual = y - predicted
+        residual = y_valid - predicted
 
-        result = pd.Series(residual, index=common_idx)
+        result = pd.Series(residual, index=common_idx[valid_mask])
 
         # Preserve original index and fill missing with original values
         full_result = series.astype(float).copy()
-        full_result.loc[common_idx] = result
+        full_result.loc[common_idx[valid_mask]] = result
 
         return full_result
 

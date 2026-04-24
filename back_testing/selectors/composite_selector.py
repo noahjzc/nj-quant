@@ -10,8 +10,8 @@ class CompositeSelector:
     综合选股器：使用多策略综合评分从全市场筛选股票
     """
 
-    def __init__(self, data_path: str = None, use_parquet: bool = True):
-        self.data_provider = DataProvider(data_dir=data_path, use_parquet=use_parquet)
+    def __init__(self):
+        self.data_provider = DataProvider()
         self.scorer = CompositeScorer()
 
     def get_all_stock_codes(self) -> list:

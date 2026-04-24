@@ -8,6 +8,7 @@ import argparse
 import logging
 import sys
 import os
+import time
 from datetime import datetime
 
 # 添加项目根目录到 path
@@ -76,55 +77,88 @@ class HistoryInitializer:
 
         return count
 
-    def init_stock_daily(self, stock_codes: list, start_date: str, end_date: str) -> int:
-        """初始化股票日线数据"""
+    def _get_processed_stocks(self, session) -> set:
+        """获取数据库中已处理的股票代码"""
+        result = session.query(StockDaily.stock_code).distinct().all()
+        return {r[0] for r in result}
+
+    def init_stock_daily(self, stock_codes: list, start_date: str, end_date: str,
+                         request_interval: float = 1.0) -> int:
+        """初始化股票日线数据（支持断点续传）
+
+        Args:
+            stock_codes: 股票代码列表
+            start_date: 开始日期
+            end_date: 结束日期
+            request_interval: 请求间隔（秒），防止被封
+        """
         total = len(stock_codes)
         success_count = 0
         fail_count = 0
+        skip_count = 0
 
         session = self.Session()
 
+        # 获取已处理的股票（用于断点续传）
+        processed = self._get_processed_stocks(session)
+        logger.info(f"数据库中已有 {len(processed)} 只股票的数据，将跳过")
+
         for i, code in enumerate(stock_codes):
             if (i + 1) % 50 == 0:
-                logger.info(f"进度: {i + 1}/{total}")
+                logger.info(f"进度: {i + 1}/{total} (成功: {success_count}, 失败: {fail_count}, 跳过: {skip_count})")
+
+            # 跳过已处理的股票
+            if code in processed:
+                skip_count += 1
+                continue
 
             try:
                 df = self.client.get_stock_daily(code, start_date, end_date)
 
                 if df.empty:
                     fail_count += 1
-                    continue
+                else:
+                    for _, row in df.iterrows():
+                        daily = StockDaily(
+                            stock_code=row['stock_code'],
+                            trade_date=row['trade_date'],
+                            open=row['open'],
+                            high=row['high'],
+                            low=row['low'],
+                            close=row['close'],
+                            volume=row['volume'],
+                            turnover=row['turnover'],
+                            amplitude=row['amplitude'],
+                            change_pct=row['change_pct'],
+                            is_trading=row.get('is_trading', True)
+                        )
+                        session.merge(daily)
 
-                for _, row in df.iterrows():
-                    daily = StockDaily(
-                        stock_code=row['stock_code'],
-                        trade_date=row['trade_date'],
-                        open=row['open'],
-                        high=row['high'],
-                        low=row['low'],
-                        close=row['close'],
-                        volume=row['volume'],
-                        turnover=row['turnover'],
-                        amplitude=row['amplitude'],
-                        change_pct=row['change_pct'],
-                        is_trading=row.get('is_trading', True)
-                    )
-                    session.merge(daily)
-
-                session.commit()
-                success_count += 1
+                    session.commit()
+                    success_count += 1
 
             except Exception as e:
                 session.rollback()
                 logger.warning(f"获取 {code} 日线数据失败: {e}")
                 fail_count += 1
 
+            # 请求间隔，防止被封
+            time.sleep(request_interval)
+
         session.close()
-        logger.info(f"日线数据初始化完成: 成功 {success_count}, 失败 {fail_count}")
+        logger.info(f"日线数据初始化完成: 成功 {success_count}, 失败 {fail_count}, 跳过 {skip_count}")
         return success_count
 
-    def init_index_daily(self, index_codes: list, start_date: str, end_date: str) -> int:
-        """初始化指数日线数据"""
+    def init_index_daily(self, index_codes: list, start_date: str, end_date: str,
+                         request_interval: float = 1.0) -> int:
+        """初始化指数日线数据
+
+        Args:
+            index_codes: 指数代码列表
+            start_date: 开始日期
+            end_date: 结束日期
+            request_interval: 请求间隔（秒），防止被封
+        """
         session = self.Session()
         success_count = 0
 
@@ -155,12 +189,21 @@ class HistoryInitializer:
                 session.rollback()
                 logger.warning(f"获取 {code} 指数数据失败: {e}")
 
+            time.sleep(request_interval)
+
         session.close()
         logger.info(f"指数数据初始化完成: {success_count}/{len(index_codes)}")
         return success_count
 
-    def init_financial(self, stock_codes: list, years: list = None) -> int:
-        """初始化财务数据"""
+    def init_financial(self, stock_codes: list, years: list = None,
+                       request_interval: float = 1.0) -> int:
+        """初始化财务数据
+
+        Args:
+            stock_codes: 股票代码列表
+            years: 要获取的年份列表
+            request_interval: 请求间隔（秒），防止被封
+        """
         if years is None:
             years = [2021, 2022, 2023, 2024, 2025]
 
@@ -177,6 +220,7 @@ class HistoryInitializer:
                 df = self.client.get_stock_financial(code)
 
                 if df.empty:
+                    time.sleep(request_interval)
                     continue
 
                 # 过滤指定年份
@@ -207,6 +251,9 @@ class HistoryInitializer:
             except Exception as e:
                 session.rollback()
                 logger.warning(f"获取 {code} 财务数据失败: {e}")
+
+            # 请求间隔，防止被封
+            time.sleep(request_interval)
 
         session.close()
         logger.info(f"财务数据初始化完成: {success_count}/{total}")

@@ -34,9 +34,9 @@ STRATEGY_MAP = {
 class StrategyEvaluator:
     """策略评估器：评估各策略过去N周的表现"""
 
-    def __init__(self, stock_codes: list, data_path: str = None, initial_capital: float = 100000.0, use_parquet: bool = True):
+    def __init__(self, stock_codes: list, initial_capital: float = 100000.0):
         self.stock_codes = stock_codes
-        self.data_provider = DataProvider(data_dir=data_path, use_parquet=use_parquet)
+        self.data_provider = DataProvider()
         self.initial_capital = initial_capital
 
     def get_recent_trading_dates(self, reference_date: pd.Timestamp, weeks: int = 4) -> tuple:
@@ -63,7 +63,6 @@ class StrategyEvaluator:
             try:
                 engine = strategy_class(
                     stock_code=code,
-                    data_path=self.data_path,
                     initial_capital=self.initial_capital,
                     start_date=start_date.strftime('%Y-%m-%d')
                 )

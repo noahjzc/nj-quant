@@ -6,14 +6,15 @@ from back_testing.optimization.genetic_optimizer.chromosome import Chromosome
 
 def test_chromosome_from_weights():
     """Test creating chromosome from weight dict"""
-    weights = {'PB': 0.15, 'PE_TTM': 0.10, 'PS_TTM': 0.05, 'RSI_1': 0.15,
-               'KDJ_K': 0.05, 'MA_5': 0.05, 'MA_20': 0.05, 'TURNOVER': 0.10,
-               'VOLUME_RATIO': 0.05, 'AMPLITUDE': 0.05}
+    # Scale weights to sum=1.0 (original sum=0.80, so multiply by 1.25)
+    weights = {'PB': 0.1875, 'PE_TTM': 0.125, 'PS_TTM': 0.0625, 'RSI_1': 0.1875,
+               'KDJ_K': 0.0625, 'MA_5': 0.0625, 'MA_20': 0.0625, 'TURNOVER': 0.125,
+               'VOLUME_RATIO': 0.0625, 'AMPLITUDE': 0.0625}
     chrom = Chromosome(weights)
     result = chrom.to_dict()
 
     # Verify weights are approximately correct
-    assert abs(result['PB'] - 0.15) < 0.001
+    assert abs(result['PB'] - 0.1875) < 0.001
     assert abs(sum(result.values()) - 1.0) < 0.001
 
 
@@ -52,9 +53,10 @@ def test_chromosome_mutation():
 
 def test_chromosome_repr():
     """Test string representation"""
-    chrom = Chromosome({'PB': 0.15, 'PE_TTM': 0.10, 'PS_TTM': 0.05, 'RSI_1': 0.15,
-                       'KDJ_K': 0.05, 'MA_5': 0.05, 'MA_20': 0.05, 'TURNOVER': 0.10,
-                       'VOLUME_RATIO': 0.05, 'AMPLITUDE': 0.05})
+    # Scale weights to sum=1.0 (original sum=0.80, so multiply by 1.25)
+    chrom = Chromosome({'PB': 0.1875, 'PE_TTM': 0.125, 'PS_TTM': 0.0625, 'RSI_1': 0.1875,
+                       'KDJ_K': 0.0625, 'MA_5': 0.0625, 'MA_20': 0.0625, 'TURNOVER': 0.125,
+                       'VOLUME_RATIO': 0.0625, 'AMPLITUDE': 0.0625})
     repr_str = repr(chrom)
     assert 'PB' in repr_str
-    assert '0.15' in repr_str
+    assert '0.188' in repr_str

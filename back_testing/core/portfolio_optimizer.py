@@ -10,17 +10,16 @@ class PortfolioOptimizer:
     对策略参数进行网格搜索，找到历史表现最佳的参数组合
     """
 
-    def __init__(self, stock_codes, data_path, benchmark_index='sh000001'):
+    def __init__(self, stock_codes, benchmark_index='sh000001'):
         self.stock_codes = stock_codes
-        self.data_path = data_path
         self.benchmark_index = benchmark_index
 
     def optimize_rsi(self, rsi_buy_levels, rsi_sell_levels):
         """优化RSI策略参数"""
         # Create a parameterized RSI strategy class
         class RSICustomStrategy(BacktestEngine):
-            def __init__(self, stock_code, data_path, initial_capital, benchmark_index, rsi_buy, rsi_sell):
-                super().__init__(stock_code, data_path, initial_capital, benchmark_index)
+            def __init__(self, stock_code, initial_capital, benchmark_index, rsi_buy, rsi_sell):
+                super().__init__(stock_code, initial_capital, benchmark_index)
                 self.rsi_buy = rsi_buy
                 self.rsi_sell = rsi_sell
 
@@ -42,7 +41,6 @@ class PortfolioOptimizer:
             for code in self.stock_codes:
                 engine = RSICustomStrategy(
                     stock_code=code,
-                    data_path=self.data_path,
                     initial_capital=100000,
                     benchmark_index=self.benchmark_index,
                     rsi_buy=rsi_buy,

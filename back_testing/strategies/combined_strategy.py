@@ -1,4 +1,5 @@
 from back_testing.core.backtest_engine import BacktestEngine
+from data_column_names import MA_5, MA_20, RSI_1
 import numpy as np
 from pandas import DataFrame
 
@@ -15,9 +16,9 @@ class CombinedStrategy(BacktestEngine):
     def generate_signals(self) -> DataFrame:
         df = self.data.copy()
 
-        ma5_col = 'MA_5'
-        ma20_col = 'MA_20'
-        rsi_col = 'rsi1'
+        ma5_col = MA_5
+        ma20_col = MA_20
+        rsi_col = RSI_1
 
         # MA golden cross
         ma_golden = (df[ma5_col] > df[ma20_col]) & (df[ma5_col].shift(1) <= df[ma20_col].shift(1))

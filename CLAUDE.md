@@ -118,3 +118,5 @@ The `PerformanceAnalyzer` calculates:
 - Data files use GBK encoding for CSV
 - Default data path: `data/daily_ycz/*.parquet`
 - Index data path: `data/metadata/daily_ycz/index/`
+
+

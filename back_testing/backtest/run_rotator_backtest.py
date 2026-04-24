@@ -5,7 +5,7 @@ import sys
 import io
 
 # 设置控制台输出为UTF-8
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', line_buffering=True)
 
 import argparse
 import pandas as pd
@@ -14,8 +14,8 @@ from datetime import datetime, timedelta
 from back_testing.portfolio_rotator import PortfolioRotator
 from back_testing.data.data_provider import DataProvider
 
-# Parquet数据目录
-DATA_PATH = None  # 默认为 project_root/data/daily_ycz
+# Parquet数据目录（已废弃，数据现在从DB读取）
+DATA_PATH = None
 INITIAL_CAPITAL = 1000000.0  # 100万
 N_STOCKS = 5
 N_WEEKS = 4
@@ -66,14 +66,13 @@ def run_backtest(start_date: str, end_date: str, initial_capital: float = INITIA
     print("=" * 60)
 
     rotator = PortfolioRotator(
-        data_path=DATA_PATH,
         initial_capital=initial_capital,
         n_stocks=N_STOCKS,
         n_weeks=N_WEEKS
     )
 
     # 创建数据提供器
-    data_provider = DataProvider(data_dir=DATA_PATH, use_parquet=True)
+    data_provider = DataProvider()
 
     # 获取所有调仓日
     fridays = get_trading_fridays(start_date, end_date)

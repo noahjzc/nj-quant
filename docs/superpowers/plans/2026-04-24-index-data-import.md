@@ -1,6 +1,7 @@
 # 指数数据导入实现计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:
+> executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 将`D:\workspace\code\mine\quant\data\all-overview-data\index`下62个CSV文件导入PostgreSQL的`index_daily`表。
 
@@ -12,17 +13,18 @@
 
 ## 文件结构
 
-| 文件 | 职责 |
-|------|------|
-| `back_testing/data/sync/import_index_from_csv.py` | 新建：批量导入入口脚本 |
-| `back_testing/data/db/models.py` | 已有：IndexDaily模型 |
-| `back_testing/data/db/connection.py` | 已有：数据库连接 |
+| 文件                                                | 职责              |
+|---------------------------------------------------|-----------------|
+| `back_testing/data/sync/import_index_from_csv.py` | 新建：批量导入入口脚本     |
+| `back_testing/data/db/models.py`                  | 已有：IndexDaily模型 |
+| `back_testing/data/db/connection.py`              | 已有：数据库连接        |
 
 ---
 
 ## Task 1: 创建导入脚本
 
 **Files:**
+
 - Create: `back_testing/data/sync/import_index_from_csv.py`
 
 - [ ] **Step 1: 编写导入脚本**
@@ -36,6 +38,7 @@
 """
 import sys
 import io
+
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', line_buffering=True)
 
 import logging

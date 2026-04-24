@@ -56,15 +56,17 @@ class StopLossStrategies:
         if len(df) < period + 1:
             raise ValueError(f"数据长度不足{period + 1}根K线，无法计算ATR")
 
-        # 获取列名（兼容中文和英文列名）
-        high_col = StopLossStrategies._get_column(df, 'HIGH_PRICE', '最高价')
-        low_col = StopLossStrategies._get_column(df, 'LOW_PRICE', '最低价')
-        close_col = StopLossStrategies._get_column(df, 'CLOSE_PRICE', '收盘价')
+        # 获取列名（兼容中文、英文大写和英文小写列名）
+        high_col = StopLossStrategies._get_column(df, 'high', 'HIGH_PRICE', '最高价')
+        low_col = StopLossStrategies._get_column(df, 'low', 'LOW_PRICE', '最低价')
+        close_col = StopLossStrategies._get_column(df, 'close', 'CLOSE_PRICE', '收盘价')
 
         # 尝试获取前收盘价，如果没有则用收盘价前一值
-        prev_close_col = '前收盘价' if '前收盘价' in df.columns else None
-        if prev_close_col is None and 'PREVIOUS_CLOSE_PRICE' in df.columns:
-            prev_close_col = 'PREVIOUS_CLOSE_PRICE'
+        prev_close_col = None
+        for col in ['prev_adj_close', 'prev_close', 'PREVIOUS_CLOSE_PRICE', '前收盘价']:
+            if col in df.columns:
+                prev_close_col = col
+                break
 
         # 计算 True Range
         high = df[high_col].values
@@ -255,10 +257,10 @@ if __name__ == '__main__':
         # 创建测试数据
         dates = pd.date_range('2024-01-01', periods=20, freq='D')
         test_data = pd.DataFrame({
-            'HIGH_PRICE': [10.0 + i * 0.1 for i in range(20)],
-            'LOW_PRICE': [9.0 + i * 0.1 for i in range(20)],
-            'CLOSE_PRICE': [9.8 + i * 0.1 for i in range(20)],
-            'PREVIOUS_CLOSE_PRICE': [9.5 + i * 0.1 for i in range(20)],
+            'high': [10.0 + i * 0.1 for i in range(20)],
+            'low': [9.0 + i * 0.1 for i in range(20)],
+            'close': [9.8 + i * 0.1 for i in range(20)],
+            'prev_adj_close': [9.5 + i * 0.1 for i in range(20)],
         }, index=dates)
 
         # ========== Test 1: ATR Calculation ==========

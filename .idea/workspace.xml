@@ -5,9 +5,51 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="ba9c56f9-9fae-4e2f-bc58-82725a66fec3" name="Changes" comment="init">
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.claude/settings.local.json" beforeDir="false" afterPath="$PROJECT_DIR$/.claude/settings.local.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.lingma/rules/project_rule.md" beforeDir="false" afterPath="$PROJECT_DIR$/.lingma/rules/project_rule.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/analysis/performance_analyzer.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/analysis/performance_analyzer.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/backtest/run_composite_backtest.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/backtest/run_composite_backtest.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/backtest/run_rotator_backtest.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/backtest/run_rotator_backtest.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/composite_rotator.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/composite_rotator.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/composite_scorer.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/composite_scorer.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/core/backtest_engine.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/core/backtest_engine.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/core/portfolio_optimizer.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/core/portfolio_optimizer.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/data/data_provider.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/data/data_provider.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/data/db/connection.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/data/db/connection.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/data/db/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/data/db/models.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/data/sync/baostock_client.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/data/sync/baostock_client.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/data/sync/daily_update.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/data/sync/daily_update.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/data/sync/init_history.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/data/sync/init_history.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/factors/factor_loader.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/factors/factor_loader.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/factors/factor_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/factors/factor_utils.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/chromosome.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/chromosome.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/crossover.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/crossover.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/elite.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/elite.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/fitness.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/fitness.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/mutation.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/mutation.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/niching.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/niching.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/optimizer.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/optimizer.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/population.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/population.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/selection.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/selection.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/sensitivity.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/sensitivity.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/walk_forward.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/walk_forward.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/run_optimization.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/run_optimization.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/portfolio_backtest.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/portfolio_backtest.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/portfolio_rotator.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/portfolio_rotator.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/risk/stop_loss_strategies.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/risk/stop_loss_strategies.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/selectors/composite_selector.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/selectors/composite_selector.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/selectors/stock_selector.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/selectors/stock_selector.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/signal_scorer.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/signal_scorer.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/strategies/combined_strategy.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/strategies/combined_strategy.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/strategies/ma_strategy.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/strategies/ma_strategy.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/strategies/macd_strategy.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/strategies/macd_strategy.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/strategies/rsi_strategy.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/strategies/rsi_strategy.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/strategy_evaluator.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/strategy_evaluator.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data_column_names.py" beforeDir="false" afterPath="$PROJECT_DIR$/data_column_names.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/superpowers/plans/2026-04-21-genetic-algorithm-factor-optimization-plan.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/superpowers/plans/2026-04-21-genetic-algorithm-factor-optimization-plan.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/superpowers/specs/2026-04-21-genetic-algorithm-factor-optimization-design.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/superpowers/specs/2026-04-21-genetic-algorithm-factor-optimization-design.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/optimization/test_chromosome.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/back_testing/optimization/test_chromosome.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -38,6 +80,7 @@
     "Python.run_backtest.executor": "Run",
     "Python.run_composite_backtest.executor": "Run",
     "Python.run_full_backtest.executor": "Run",
+    "Python.run_optimization.executor": "Debug",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.git.unshallow": "true",
     "git-widget-placeholder": "master",
@@ -60,7 +103,7 @@
       <recent name="D:\workspace\code\mine\quant\nj-quant\doc" />
     </key>
   </component>
-  <component name="RunManager" selected="Python.run_composite_backtest">
+  <component name="RunManager" selected="Python.run_optimization">
     <configuration name="main" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="nj-quant" />
       <option name="ENV_FILES" value="" />
@@ -153,8 +196,32 @@
       <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
+    <configuration name="run_optimization" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="nj-quant" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/back_testing/optimization" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/back_testing/optimization/run_optimization.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
     <recent_temporary>
       <list>
+        <item itemvalue="Python.run_optimization" />
         <item itemvalue="Python.run_composite_backtest" />
         <item itemvalue="Python.run_full_backtest" />
         <item itemvalue="Python.run_backtest" />
@@ -184,6 +251,10 @@
       <workItem from="1748572877902" duration="1357000" />
       <workItem from="1776524837111" duration="6418000" />
       <workItem from="1776613083530" duration="21940000" />
+      <workItem from="1776757199024" duration="6028000" />
+      <workItem from="1776782557748" duration="2538000" />
+      <workItem from="1776816664072" duration="790000" />
+      <workItem from="1776822131119" duration="7625000" />
     </task>
     <task id="LOCAL-00001" summary="init">
       <option name="closed" value="true" />
@@ -222,6 +293,7 @@
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/nj_quant$run_backtest.coverage" NAME="run_backtest Coverage Results" MODIFIED="1776527753792" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/back_testing" />
     <SUITE FILE_PATH="coverage/nj_quant$run_full_backtest.coverage" NAME="run_full_backtest Coverage Results" MODIFIED="1776530129988" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/back_testing" />
+    <SUITE FILE_PATH="coverage/nj_quant$run_optimization.coverage" NAME="run_optimization Coverage Results" MODIFIED="1776823470674" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/back_testing/optimization" />
     <SUITE FILE_PATH="coverage/nj_quant$main.coverage" NAME="main Coverage Results" MODIFIED="1746007726253" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/nj_quant$run_composite_backtest.coverage" NAME="run_composite_backtest Coverage Results" MODIFIED="1776672202191" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/back_testing" />
   </component>

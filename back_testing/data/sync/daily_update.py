@@ -11,6 +11,7 @@
 import argparse
 import logging
 import sys
+import time
 from datetime import date, datetime, timedelta
 
 sys.path.insert(0, str(__file__).rsplit('back_testing', 1)[0])
@@ -99,8 +100,13 @@ class DailyUpdater:
             logger.warning(f"获取 {stock_code} 数据失败: {e}")
             return False
 
-    def update_portfolio(self, portfolio: list) -> dict:
-        """盘中更新持仓股票"""
+    def update_portfolio(self, portfolio: list, request_interval: float = 1.0) -> dict:
+        """盘中更新持仓股票
+
+        Args:
+            portfolio: 股票代码列表
+            request_interval: 请求间隔（秒），防止被封
+        """
         logger.info(f"盘中更新: {len(portfolio)} 只股票")
         results = {'success': 0, 'fail': 0}
 
@@ -114,34 +120,50 @@ class DailyUpdater:
             else:
                 results['fail'] += 1
 
+            time.sleep(request_interval)
+
         logger.info(f"盘中更新完成: 成功 {results['success']}, 失败 {results['fail']}")
         return results
 
-    def update_full_market(self) -> dict:
-        """收盘后全市场更新"""
+    def update_full_market(self, request_interval: float = 1.0) -> dict:
+        """收盘后全市场更新
+
+        Args:
+            request_interval: 请求间隔（秒），防止被封
+        """
         logger.info("开始全市场收盘后更新...")
 
         # 获取所有活跃股票
         stocks = self.get_all_active_stocks()
         logger.info(f"全市场股票数量: {len(stocks)}")
 
-        # 计算起始日期（获取最近30天数据，确保不遗漏）
-        start_date = date.today() - timedelta(days=30)
-
-        results = {'success': 0, 'fail': 0}
+        results = {'success': 0, 'fail': 0, 'skip': 0}
 
         for i, code in enumerate(stocks):
             if (i + 1) % 100 == 0:
                 logger.info(f"进度: {i + 1}/{len(stocks)}")
 
-            if self.update_stock_daily(code, start_date):
+            # 获取该股票数据库中最后一条记录的日期
+            last_date = self.get_last_trade_date(code)
+
+            # 如果数据库没有记录，获取最近30天数据
+            if last_date is None:
+                last_date = date.today() - timedelta(days=30)
+                logger.debug(f"{code} 无历史数据，将获取近30天")
+            else:
+                logger.debug(f"{code} 最后日期: {last_date}")
+
+            if self.update_stock_daily(code, last_date):
                 results['success'] += 1
             else:
                 results['fail'] += 1
 
-        # 更新指数数据
+            time.sleep(request_interval)
+
+        # 更新指数数据（获取最近30天）
         index_codes = ['sh000001', 'sh000300', 'sz399001', 'sz399006']
-        self.update_index_daily(index_codes, start_date)
+        index_start = date.today() - timedelta(days=30)
+        self.update_index_daily(index_codes, index_start)
 
         logger.info(f"全市场更新完成: 成功 {results['success']}, 失败 {results['fail']}")
         return results

@@ -1,5 +1,6 @@
 """baostock API 封装层"""
 import logging
+import threading
 from datetime import date, datetime
 from typing import List, Optional
 
@@ -40,6 +41,77 @@ class BaostockClient:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._logout()
         return False
+
+    def _query_with_timeout(self, bs_code: str, fields: str, start_date: str, end_date: str,
+                            adjustflag: str = "2", timeout: int = 30, max_retries: int = 3):
+        """
+        带超时和重试的查询
+
+        Args:
+            bs_code: baostock格式代码，如 sh.600519
+            fields: 查询字段
+            start_date: 开始日期
+            end_date: 结束日期
+            adjustflag: 复权类型 ("1"=前复权, "2"=后复权, "3"=不复权)
+            timeout: 超时秒数
+            max_retries: 最大重试次数
+
+        Returns:
+            ResultSet 或 None（超时或重试耗尽）
+        """
+        import time as time_module
+
+        # 需要重试的网络错误
+        retry_errors = (
+            '10054',  # 远程主机强迫关闭了一个现有的连接
+            '远程主机强迫关闭',
+            '连接被关闭',
+            'Connection reset',
+            '接收数据异常',
+        )
+
+        for attempt in range(max_retries):
+            result = {'rs': None, 'error': None}
+
+            def _query():
+                try:
+                    rs = bs.query_history_k_data_plus(
+                        bs_code,
+                        fields,
+                        start_date=start_date,
+                        end_date=end_date,
+                        frequency="d",
+                        adjustflag=adjustflag
+                    )
+                    result['rs'] = rs
+                except Exception as e:
+                    result['error'] = e
+
+            thread = threading.Thread(target=_query)
+            thread.daemon = True
+            thread.start()
+            thread.join(timeout)
+
+            if thread.is_alive():
+                logger.warning(f"查询 {bs_code} 第{attempt + 1}次超时（{timeout}秒）")
+                time_module.sleep(1)
+                continue
+
+            if result['error']:
+                error_str = str(result['error'])
+                # 检查是否是网络错误，需要重试
+                if any(e in error_str for e in retry_errors):
+                    logger.warning(f"查询 {bs_code} 第{attempt + 1}次遇到网络错误: {result['error']}")
+                    time_module.sleep(2)  # 等待后重试
+                    continue
+                else:
+                    raise result['error']
+
+            return result['rs']
+
+        # 所有重试都失败
+        logger.warning(f"查询 {bs_code} 失败，已重试{max_retries}次")
+        return None
 
     @staticmethod
     def _format_date(date_str: str) -> str:
@@ -119,14 +191,16 @@ class BaostockClient:
         # baostock 需要 sh.600519 格式
         bs_code = f"{stock_code[:2]}.{stock_code[2:]}"
 
-        rs = bs.query_history_k_data_plus(
+        rs = self._query_with_timeout(
             bs_code,
             "date,open,high,low,close,volume,amount,turn,pctChg",
-            start_date=start_date,
-            end_date=end_date,
-            frequency="d",
-            adjustflag="2"  # 后复权
+            start_date, end_date,
+            adjustflag="2",
+            timeout=30
         )
+
+        if rs is None:
+            return pd.DataFrame()
 
         if rs.error_code != '0':
             logger.warning(f"获取 {stock_code} 日线数据失败: {rs.error_msg}")
@@ -185,13 +259,16 @@ class BaostockClient:
         # baostock 格式
         bs_code = f"{index_code[:2]}.{index_code[2:]}"
 
-        rs = bs.query_history_k_data_plus(
+        rs = self._query_with_timeout(
             bs_code,
             "date,open,high,low,close,volume,amount",
-            start_date=start_date,
-            end_date=end_date,
-            frequency="d"
+            start_date, end_date,
+            adjustflag="3",
+            timeout=30
         )
+
+        if rs is None:
+            return pd.DataFrame()
 
         if rs.error_code != '0':
             logger.warning(f"获取 {index_code} 指数数据失败: {rs.error_msg}")

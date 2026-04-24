@@ -17,16 +17,15 @@ class PortfolioRotator:
     5. 等权20%持仓
     """
 
-    def __init__(self, data_path: str, initial_capital: float = 1000000.0,
+    def __init__(self, initial_capital: float = 1000000.0,
                  n_stocks: int = 5, n_weeks: int = 4):
-        self.data_path = data_path
         self.initial_capital = initial_capital
         self.n_stocks = n_stocks  # 持仓数量
         self.n_weeks = n_weeks    # 评估周期
         self.per_stock_capital = initial_capital / n_stocks
 
         self.strategy_evaluator = None
-        self.stock_selector = StockSelector(data_path)
+        self.stock_selector = StockSelector()
         self.scorer = SignalScorer()
 
         self.current_strategy = None
@@ -48,7 +47,6 @@ class PortfolioRotator:
 
         self.strategy_evaluator = StrategyEvaluator(
             stock_codes=sample_stocks,
-            data_path=self.data_path,
             initial_capital=self.per_stock_capital
         )
 

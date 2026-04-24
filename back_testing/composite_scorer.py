@@ -1,6 +1,9 @@
 import pandas as pd
 import numpy as np
 from back_testing.signal_scorer import SignalScorer
+from data_column_names import (
+    MACD_DIF, MACD_DEA, MA_5, MA_20, MA_60, VOLUME_RATIO
+)
 
 class CompositeScorer:
     """
@@ -28,8 +31,8 @@ class CompositeScorer:
 
     def calculate_macd_score(self, df: pd.DataFrame) -> pd.Series:
         """MACD评分：DIF-DEA差值归一化"""
-        dif = df['MACD_DIF'].fillna(0)
-        dea = df['MACD_DEA'].fillna(0)
+        dif = df[MACD_DIF].fillna(0)
+        dea = df[MACD_DEA].fillna(0)
         diff = dif - dea
 
         # 归一化到0-100：使用tanh压缩处理极端值
@@ -38,9 +41,9 @@ class CompositeScorer:
 
     def calculate_ma_score(self, df: pd.DataFrame) -> pd.Series:
         """MA评分：均线开口角度 + 多头排列"""
-        ma5 = df['MA_5'].fillna(0)
-        ma20 = df['MA_20'].fillna(1)
-        ma60_col = df.get('MA_60', ma20)
+        ma5 = df[MA_5].fillna(0)
+        ma20 = df[MA_20].fillna(1)
+        ma60_col = df.get(MA_60, ma20)
 
         # 开口角度
         diff = ma5 - ma20
@@ -62,7 +65,7 @@ class CompositeScorer:
 
     def calculate_volume_score(self, df: pd.DataFrame) -> pd.Series:
         """成交量评分：量比归一化"""
-        vol_ratio = df['量比'].fillna(1)
+        vol_ratio = df[VOLUME_RATIO].fillna(1)
         # 量比2.0=40分，量比5.0=100分
         score = (vol_ratio * 20).clip(0, 100)
         return score

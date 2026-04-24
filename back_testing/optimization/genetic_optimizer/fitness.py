@@ -7,9 +7,10 @@ Fitness: 适应度评估器 - 遗传算法的核心
 - 引导进化方向
 
 优化目标:
-- 主目标: 最大化 Calmar比率 = 年化收益率 / 最大回撤
-- 约束: 最大回撤 <= 20%
-- 原因: Calmar比率同时考虑了收益和风险，是衡量策略质量的好指标
+- 主目标: 最大化 Information Ratio = Alpha / Tracking Error (相对于沪深300)
+- 基准: 沪深300 (hs300)
+- 约束: 最大回撤 <= 25%
+- 原因: 信息比率衡量相对基准的超额收益风险比，更适合A股市场
 
 简化回测策略 (vs 全量回测):
 - 无日内止损/止盈/ATR移动止损 (GA需要评估数千个解，太慢)
@@ -21,8 +22,10 @@ Fitness: 适应度评估器 - 遗传算法的核心
 1. 给定因子权重配置
 2. 在每个调仓日用多因子选股
 3. 持有到下一个调仓日
-4. 计算组合收益率曲线
-5. 计算Calmar比率
+4. 计算组合收益率序列
+5. 获取同期沪深300收益率序列
+6. 计算超额收益Alpha和跟踪误差TrackingError
+7. 计算 Information Ratio = Alpha / TrackingError
 """
 import pandas as pd
 import numpy as np
@@ -38,38 +41,43 @@ class FitnessEvaluator:
     """
     适应度评估器 - 用简化回测评估因子权重配置
 
-    核心指标: Calmar比率
-    - 年化收益率: 衡量盈利能力
-    - 最大回撤: 衡量风险
-    - Calmar = 年化收益 / 最大回撤，越高越好
+    核心指标: Information Ratio (信息比率)
+    - Alpha: 组合相对沪深300的超额收益
+    - Tracking Error: 超额收益的标准差
+    - IR = Alpha / Tracking Error，越高越好
 
     约束处理:
-    - 如果最大回撤 > 20%，返回0(无效解)
+    - 如果最大回撤 > 25%，返回0(无效解)
     - 避免追求高收益但风险过大的配置
     """
 
-    def __init__(self, max_drawdown_constraint: float = 0.20,
+    def __init__(self, max_drawdown_constraint: float = 0.25,
                  n_stocks: int = 5,
-                 stop_loss_threshold: float = -0.05):
+                 stop_loss_threshold: float = -0.05,
+                 benchmark_code: str = 'sh000300'):
         """
         初始化评估器
 
         Args:
-            max_drawdown_constraint: 最大允许回撤，默认20%
+            max_drawdown_constraint: 最大允许回撤，默认25%
                                      超过此回撤的解被视为无效
             n_stocks: 持仓数量，默认5只
                      每期选择top n只等权分配
             stop_loss_threshold: 止损阈值，默认-5%
                                持仓期间任意股票亏损超过此阈值则该期收益记负
+            benchmark_code: 基准指数代码，默认沪深300 (sh000300)
         """
         self.max_drawdown_constraint = max_drawdown_constraint
         self.n_stocks = n_stocks
         self.stop_loss_threshold = stop_loss_threshold
+        self.benchmark_code = benchmark_code
 
         # 初始化数据提供者
         self.data_provider = DataProvider()
         # 初始化因子加载器
         self.factor_loader = FactorLoader(data_provider=self.data_provider)
+        # 缓存基准指数数据
+        self._benchmark_cache = {}
 
     def evaluate(self, weights: Dict[str, float],
                 start_date: pd.Timestamp,
@@ -77,7 +85,7 @@ class FitnessEvaluator:
         """
         评估因子权重配置
 
-        给定权重配置，在指定时间段运行回测，返回Calmar比率。
+        给定权重配置，在指定时间段运行回测，返回信息比率(Information Ratio)。
 
         Args:
             weights: 因子权重字典，格式 {'因子名': 权重值}
@@ -85,26 +93,36 @@ class FitnessEvaluator:
             end_date: 回测结束日期
 
         Returns:
-            Calmar比率
-            - 约束满足: 返回年化收益/最大回撤
+            Information Ratio
+            - 约束满足: 返回 Alpha / TrackingError
             - 约束违反: 返回0.0(无效解)
         """
         try:
-            # 运行回测
+            # 运行回测获取组合收益率序列
             result = self._run_backtest(weights, start_date, end_date)
 
-            annual_return = result.get('annual_return', 0)
+            portfolio_returns = result.get('weekly_returns', [])
             max_drawdown = result.get('max_drawdown', 0)
 
             # 约束检查: 最大回撤不能超过限制
             if max_drawdown > self.max_drawdown_constraint:
                 return 0.0
 
-            # 计算Calmar比率，防止除零
-            # 假设最小回撤为1%，避免Calmar变成无穷大
-            calmar = annual_return / max(max_drawdown, 0.01)
+            if len(portfolio_returns) < 4:
+                return 0.0
 
-            return calmar
+            # 获取基准收益率序列
+            benchmark_returns = self._get_benchmark_returns(
+                start_date, end_date, len(portfolio_returns)
+            )
+
+            if len(benchmark_returns) < 4:
+                return 0.0
+
+            # 计算信息比率
+            ir = self._calculate_information_ratio(portfolio_returns, benchmark_returns)
+
+            return ir
 
         except Exception as e:
             print(f"评估失败: {e}")
@@ -141,6 +159,8 @@ class FitnessEvaluator:
 
         # 组合净值序列，初始值为1.0
         portfolio_values = [1.0]
+        # 组合周收益率序列
+        weekly_returns = []
 
         # 遍历每个调仓周期
         for i in range(len(rebalance_dates) - 1):
@@ -156,6 +176,7 @@ class FitnessEvaluator:
             if len(factor_data) == 0:
                 # 无数据，组合价值不变
                 portfolio_values.append(portfolio_values[-1])
+                weekly_returns.append(0.0)
                 continue
 
             # 创建多因子选股器并选择股票
@@ -171,12 +192,15 @@ class FitnessEvaluator:
             if not selected_stocks:
                 # 未选出股票，组合价值不变
                 portfolio_values.append(portfolio_values[-1])
+                weekly_returns.append(0.0)
                 continue
 
             # 计算持有期收益率
             period_return = self._calculate_period_return(
                 selected_stocks, current_date, next_date
             )
+
+            weekly_returns.append(period_return)
 
             # 更新组合净值
             new_value = portfolio_values[-1] * (1 + period_return)
@@ -185,25 +209,13 @@ class FitnessEvaluator:
         # 转换为numpy数组便于计算
         portfolio_values = np.array(portfolio_values)
 
-        # 计算总收益率
-        total_return = portfolio_values[-1] / portfolio_values[0] - 1
-
-        # 计算年化收益率
-        # 假设每年约52周
-        n_weeks = len(portfolio_values) - 1
-        if n_weeks > 0:
-            annual_return = (1 + total_return) ** (52 / n_weeks) - 1
-        else:
-            annual_return = 0
-
         # 计算最大回撤
         max_drawdown = self._calculate_max_drawdown(portfolio_values)
 
         return {
-            'annual_return': annual_return,
+            'weekly_returns': weekly_returns,
             'max_drawdown': max_drawdown,
-            'total_return': total_return,
-            'n_weeks': n_weeks
+            'portfolio_values': portfolio_values
         }
 
     def _get_rebalance_dates(self, start_date: pd.Timestamp,
@@ -343,8 +355,125 @@ class FitnessEvaluator:
         当数据不足无法评估时返回零值结果
         """
         return {
-            'annual_return': 0.0,
+            'weekly_returns': [],
             'max_drawdown': 0.0,
-            'total_return': 0.0,
-            'n_weeks': 0
+            'portfolio_values': [1.0]
         }
+
+    def _get_benchmark_returns(self,
+                               start_date: pd.Timestamp,
+                               end_date: pd.Timestamp,
+                               n_periods: int) -> list:
+        """
+        获取基准指数周收益率序列
+
+        Args:
+            start_date: 开始日期
+            end_date: 结束日期
+            n_periods: 需要的收益率期数
+
+        Returns:
+            基准周收益率列表
+        """
+        cache_key = (start_date, end_date)
+        if cache_key in self._benchmark_cache:
+            cached = self._benchmark_cache[cache_key]
+            if len(cached) >= n_periods:
+                return cached[:n_periods]
+
+        try:
+            # 获取基准指数数据
+            df = self.data_provider.get_index_data(
+                self.benchmark_code,
+                start_date=start_date.strftime('%Y-%m-%d'),
+                end_date=end_date.strftime('%Y-%m-%d')
+            )
+
+            if df is None or len(df) < 2:
+                return [0.0] * n_periods
+
+            # 使用后复权收盘价计算周收益率
+            price_col = 'adj_close'
+            if price_col not in df.columns:
+                # 尝试 close 列
+                price_col = 'close'
+
+            df = df.sort_index()
+            prices = df[price_col].values
+
+            if len(prices) < 2:
+                return [0.0] * n_periods
+
+            # 计算周收益率 (与组合调仓周期对齐)
+            rebalance_dates = self._get_rebalance_dates(start_date, end_date)
+            benchmark_returns = []
+
+            for i in range(len(rebalance_dates) - 1):
+                # 找到调仓日对应的价格
+                date_before = rebalance_dates[i]
+                date_after = rebalance_dates[i + 1]
+
+                # 简化处理：使用期初和期末价格计算收益
+                idx_before = 0  # 用第一周的数据代表
+                idx_after = min(i + 1, len(prices) - 1)
+
+                if idx_before < idx_after and prices[idx_before] > 0:
+                    period_return = (prices[idx_after] / prices[idx_before]) - 1
+                    benchmark_returns.append(period_return)
+                else:
+                    benchmark_returns.append(0.0)
+
+            # 缓存结果
+            self._benchmark_cache[cache_key] = benchmark_returns
+
+            return benchmark_returns[:n_periods]
+
+        except Exception as e:
+            print(f"获取基准数据失败: {e}")
+            return [0.0] * n_periods
+
+    def _calculate_information_ratio(self,
+                                     portfolio_returns: list,
+                                     benchmark_returns: list) -> float:
+        """
+        计算信息比率 Information Ratio = Alpha / Tracking Error
+
+        Alpha = 平均超额收益 (组合收益 - 基准收益)
+        Tracking Error = 超额收益的标准差
+
+        Args:
+            portfolio_returns: 组合周收益率列表
+            benchmark_returns: 基准周收益率列表
+
+        Returns:
+            信息比率
+        """
+        if len(portfolio_returns) != len(benchmark_returns):
+            # 长度不匹配时截断到较短的长度
+            n = min(len(portfolio_returns), len(benchmark_returns))
+            portfolio_returns = portfolio_returns[:n]
+            benchmark_returns = benchmark_returns[:n]
+
+        if len(portfolio_returns) < 4:
+            return 0.0
+
+        # 转换为numpy数组
+        portfolio_returns = np.array(portfolio_returns)
+        benchmark_returns = np.array(benchmark_returns)
+
+        # 计算超额收益
+        excess_returns = portfolio_returns - benchmark_returns
+
+        # 计算Alpha (年化超额收益)
+        alpha = np.mean(excess_returns) * 52  # 年化
+
+        # 计算Tracking Error (超额收益的标准差，年化)
+        tracking_error = np.std(excess_returns, ddof=1) * np.sqrt(52)
+
+        # 防止除零
+        if tracking_error < 1e-6:
+            return 0.0
+
+        information_ratio = alpha / tracking_error
+
+        return information_ratio

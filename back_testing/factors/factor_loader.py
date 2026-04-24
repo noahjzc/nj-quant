@@ -70,7 +70,8 @@ class FactorLoader:
         """
         result_data = {}
 
-        for code in stock_codes:
+        total = len(stock_codes)
+        for idx, code in enumerate(stock_codes):
             try:
                 df = self.data_provider.get_stock_data(code, date=date)
                 if len(df) == 0:
@@ -94,6 +95,10 @@ class FactorLoader:
                         row[factor] = None
 
                 result_data[code] = row
+
+                # 每500只打印一次进度
+                if (idx + 1) % 500 == 0:
+                    print(f"    [因子加载] 已处理 {idx + 1}/{total} 只股票...", flush=True)
 
             except Exception as e:
                 logger.warning(f"Failed to load factors for {code}: {e}")
@@ -124,8 +129,12 @@ class FactorLoader:
         Returns:
             DataFrame: 所有股票的因子数据
         """
+        print(f"    [因子加载] 获取全市场股票列表...", flush=True)
         all_codes = self.data_provider.get_all_stock_codes()
-        return self.load_stock_factors(all_codes, date, factors)
+        print(f"    [因子加载] 股票列表共 {len(all_codes)} 只，正在逐只加载因子...", flush=True)
+        result = self.load_stock_factors(all_codes, date, factors)
+        print(f"    [因子加载] 完成，成功加载 {len(result)} 只股票的因子数据", flush=True)
+        return result
 
     def load_stock_turnover(
         self,

@@ -1,5 +1,6 @@
 from pandas import DataFrame
 from back_testing.core.backtest_engine import BacktestEngine
+from data_column_names import RSI_1
 import numpy as np
 
 
@@ -18,7 +19,7 @@ class RSIReversalStrategy(BacktestEngine):
         """生成RSI均值回归交易信号"""
         df = self.data.copy()
 
-        rsi_col = 'rsi1'
+        rsi_col = RSI_1
 
         # 买入信号：RSI < 30 超卖
         buy_signal = df[rsi_col] < 30
@@ -53,7 +54,7 @@ class RSIExtremaStrategy(BacktestEngine):
         """生成RSI极值交易信号"""
         df = self.data.copy()
 
-        rsi_col = 'rsi1'
+        rsi_col = RSI_1
 
         # 买入信号：RSI < 25 深度超卖
         buy_signal = df[rsi_col] < 25

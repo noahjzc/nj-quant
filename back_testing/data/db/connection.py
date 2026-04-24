@@ -1,5 +1,4 @@
 """数据库连接管理"""
-import os
 from configparser import ConfigParser
 from pathlib import Path
 from sqlalchemy import create_engine
@@ -41,7 +40,11 @@ def get_session():
 
 
 def close_session():
-    """关闭会话"""
-    global _session_factory
+    """关闭会话并释放连接池"""
+    global _engine, _session_factory
     if _session_factory is not None:
+        _session_factory.remove()
         _session_factory = None
+    if _engine is not None:
+        _engine.dispose()
+        _engine = None

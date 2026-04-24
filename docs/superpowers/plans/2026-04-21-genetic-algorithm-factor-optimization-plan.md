@@ -514,18 +514,28 @@ def test_fitness_with_infeasible_solution():
 
 ```python
 # back_testing/optimization/genetic_optimizer/fitness.py
-"""适应度函数"""
+"""适应度函数 - 简化版回测用于GA评估"""
 import pandas as pd
 import numpy as np
-from typing import Dict, Optional
+from typing import Dict, List, Tuple
+from datetime import timedelta
 from back_testing.selectors.multi_factor_selector import MultiFactorSelector
 from back_testing.factors.factor_loader import FactorLoader
+from back_testing.factors.factor_config import get_factor_directions
 from back_testing.data.data_provider import DataProvider
 
 class FitnessEvaluator:
-    """适应度评估器"""
+    """
+    适应度评估器 - 简化版回测
 
-    def __init__(self, data_path: str,
+    与完整回测的差异：
+    - 不计算每日ATR/止损/止盈（计算量太大）
+    - 简化假设：每周按评分选股，下周等权持有
+    - 用真实价格数据计算实际收益
+    - 适合GA的高频评估场景
+    """
+
+    def __init__(self, data_path: str = None,
                  max_drawdown_constraint: float = 0.20,
                  n_stocks: int = 5):
         """
@@ -538,8 +548,10 @@ class FitnessEvaluator:
         self.max_drawdown_constraint = max_drawdown_constraint
         self.n_stocks = n_stocks
 
-        # 用于加载因子数据
-        self.factor_loader = FactorLoader()
+        # 数据提供器
+        self.data_provider = DataProvider(use_db=False, data_dir=data_path)
+        # 因子加载器
+        self.factor_loader = FactorLoader(data_provider=self.data_provider)
 
     def evaluate(self, weights: Dict[str, float],
                 start_date: pd.Timestamp,
@@ -556,18 +568,16 @@ class FitnessEvaluator:
             Calmar比率 (无效解返回0)
         """
         try:
-            # 1. 运行回测
             result = self._run_backtest(weights, start_date, end_date)
 
-            # 2. 提取指标
             annual_return = result.get('annual_return', 0)
             max_drawdown = result.get('max_drawdown', 0)
 
-            # 3. 约束检查
+            # 约束检查
             if max_drawdown > self.max_drawdown_constraint:
                 return 0.0
 
-            # 4. 计算Calmar比率 (防止除零)
+            # Calmar比率 (防止除零)
             calmar = annual_return / max(max_drawdown, 0.01)
 
             return calmar
@@ -580,107 +590,176 @@ class FitnessEvaluator:
                      start_date: pd.Timestamp,
                      end_date: pd.Timestamp) -> Dict:
         """
-        运行回测
+        简化回测：每周选股，下周持有，计算实际收益
 
-        调用CompositeRotator进行真实回测
-
-        Args:
-            weights: 因子权重
-            start_date: 开始日期
-            end_date: 结束日期
-
-        Returns:
-            回测结果字典 {
-                'annual_return': float,
-                'max_drawdown': float,
-                'sharpe_ratio': float,
-                'total_return': float
-            }
+        流程：
+        1. 获取回测区间内所有周五
+        2. 每周五根据因子评分选股
+        3. 下周五计算持仓收益
+        4. 累积计算组合净值曲线
+        5. 计算绩效指标
         """
-        from back_testing.composite_rotator import CompositeRotator
+        # 1. 获取调仓日（每周五）
+        rebalance_dates = self._get_rebalance_dates(start_date, end_date)
+        if len(rebalance_dates) < 2:
+            return self._empty_result()
 
-        # 创建CompositeRotator，使用新的因子权重
-        rotator = CompositeRotator(
-            data_path=self.data_path,
-            initial_capital=1000000.0,
-            n_stocks=self.n_stocks,
-            use_multi_factor=True
-        )
+        # 2. 因子方向配置
+        factor_directions = get_factor_directions()
 
-        # 更新因子权重
-        rotator.factor_weights = weights
+        # 3. 初始化
+        portfolio_values = [1.0]  # 初始净值
+        current_date = rebalance_dates[0]
 
-        # 导入方向配置
-        from back_testing.factors.factor_config import get_factor_directions
-        rotator.factor_directions = get_factor_directions()
+        # 4. 每周循环
+        for i in range(len(rebalance_dates) - 1):
+            current_date = rebalance_dates[i]
+            next_date = rebalance_dates[i + 1]
 
-        # 运行回测
-        # 注意: 实际实现需要CompositeRotator支持外部调用run方法
-        # 或者需要重构以支持单次回测调用
-
-        # 简化: 收集每周选股结果并模拟计算
-        dates = pd.date_range(start=start_date, end=end_date, freq='W')
-        weekly_returns = []
-
-        for date in dates:
             # 加载当日因子数据
-            factors = list(weights.keys())
-            factor_data = self.factor_loader.load_all_stock_factors(date, factors)
+            factor_list = list(weights.keys())
+            factor_data = self.factor_loader.load_all_stock_factors(current_date, factor_list)
 
             if len(factor_data) == 0:
+                # 无法获取因子数据，跳过这周
+                portfolio_values.append(portfolio_values[-1])
                 continue
 
-            # 计算评分
+            # 使用多因子选择器选股
             selector = MultiFactorSelector(
                 weights=weights,
-                directions={k: 1 if 'PB' not in k else -1
-                           for k in weights.keys()}
+                directions=factor_directions
             )
-            selected = selector.select_top_stocks(factor_data, n=self.n_stocks)
+            selected_stocks = selector.select_top_stocks(
+                data=factor_data,
+                n=self.n_stocks
+            )
 
-            # 获取选中股票的平均收益率 (简化)
-            # 实际需要获取这些股票从date到下个date的真实收益
-            # 这里用随机模拟替代
-            weekly_returns.append(0.01)  # 简化假设每周1%收益
+            if not selected_stocks:
+                portfolio_values.append(portfolio_values[-1])
+                continue
 
-        if not weekly_returns:
-            return {
-                'annual_return': 0.0,
-                'max_drawdown': 0.0,
-                'sharpe_ratio': 0.0,
-                'total_return': 0.0
-            }
+            # 计算持仓收益（下周持有期的收益）
+            period_return = self._calculate_period_return(selected_stocks, current_date, next_date)
 
-        # 计算组合收益序列
-        portfolio_values = [1.0]
-        for r in weekly_returns:
-            portfolio_values.append(portfolio_values[-1] * (1 + r))
+            # 更新组合净值
+            new_value = portfolio_values[-1] * (1 + period_return)
+            portfolio_values.append(new_value)
 
-        # 计算绩效指标
+        # 5. 计算绩效指标
         portfolio_values = np.array(portfolio_values)
-        total_return = (portfolio_values[-1] / portfolio_values[0]) - 1
-        annual_return = (1 + total_return) ** (52 / len(weekly_returns)) - 1
+        total_return = portfolio_values[-1] / portfolio_values[0] - 1
 
-        # 计算最大回撤
-        peak = portfolio_values[0]
-        max_drawdown = 0
-        for value in portfolio_values:
-            if value > peak:
-                peak = value
-            drawdown = (peak - value) / peak
-            if drawdown > max_drawdown:
-                max_drawdown = drawdown
+        # 年化收益率（假设每年52周）
+        n_weeks = len(portfolio_values) - 1
+        if n_weeks > 0:
+            annual_return = (1 + total_return) ** (52 / n_weeks) - 1
+        else:
+            annual_return = 0
 
-        # Sharpe比率简化计算 (假设无风险利率3%)
-        excess_return = annual_return - 0.03
-        volatility = np.std(weekly_returns) * np.sqrt(52)
-        sharpe_ratio = excess_return / volatility if volatility > 0 else 0
+        # 最大回撤
+        max_drawdown = self._calculate_max_drawdown(portfolio_values)
 
         return {
             'annual_return': annual_return,
             'max_drawdown': max_drawdown,
-            'sharpe_ratio': sharpe_ratio,
-            'total_return': total_return
+            'total_return': total_return,
+            'n_weeks': n_weeks
+        }
+
+    def _get_rebalance_dates(self, start_date: pd.Timestamp, end_date: pd.Timestamp) -> List[pd.Timestamp]:
+        """获取回测区间内所有周五"""
+        dates = []
+        current = pd.Timestamp(start_date)
+
+        # 找到第一个周五
+        while current.weekday() != 4:
+            current += timedelta(days=1)
+
+        # 收集所有周五
+        while current <= end_date:
+            dates.append(current)
+            current += timedelta(days=7)
+
+        return dates
+
+    def _calculate_period_return(self, stocks: List[str],
+                                 current_date: pd.Timestamp,
+                                 next_date: pd.Timestamp) -> float:
+        """
+        计算持仓期收益
+
+        Args:
+            stocks: 持仓股票列表
+            current_date: 买入日期
+            next_date: 卖出日期
+
+        Returns:
+            持仓期收益率（等权平均）
+        """
+        returns = []
+
+        for stock in stocks:
+            try:
+                # 获取期间价格数据
+                df = self.data_provider.get_stock_data(
+                    stock,
+                    start_date=current_date.strftime('%Y-%m-%d'),
+                    end_date=next_date.strftime('%Y-%m-%d')
+                )
+
+                if len(df) < 2:
+                    continue
+
+                # 找到current_date和next_date对应的价格
+                # 使用后复权价或收盘价
+                price_col = None
+                for col in ['后复权价', 'close', '收盘价']:
+                    if col in df.columns:
+                        price_col = col
+                        break
+
+                if price_col is None:
+                    continue
+
+                # 获取期间价格
+                df = df.sort_index()
+                prices = df[price_col].values
+
+                if len(prices) >= 2:
+                    period_return = (prices[-1] / prices[0]) - 1
+                    returns.append(period_return)
+
+            except Exception:
+                continue
+
+        if not returns:
+            return 0.0
+
+        # 等权平均收益
+        return np.mean(returns)
+
+    def _calculate_max_drawdown(self, portfolio_values: np.ndarray) -> float:
+        """计算最大回撤"""
+        peak = portfolio_values[0]
+        max_drawdown = 0.0
+
+        for value in portfolio_values:
+            if value > peak:
+                peak = value
+            drawdown = (peak - value) / peak if peak > 0 else 0
+            if drawdown > max_drawdown:
+                max_drawdown = drawdown
+
+        return max_drawdown
+
+    def _empty_result(self) -> Dict:
+        """空结果"""
+        return {
+            'annual_return': 0.0,
+            'max_drawdown': 0.0,
+            'total_return': 0.0,
+            'n_weeks': 0
         }
 
 def calculate_fitness(weights: Dict[str, float],

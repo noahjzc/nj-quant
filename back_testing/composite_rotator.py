@@ -5,6 +5,7 @@ from back_testing.selectors.multi_factor_selector import MultiFactorSelector
 from back_testing.factors.factor_config import get_factor_weights, get_factor_directions
 from back_testing.factors.factor_loader import FactorLoader
 from back_testing.composite_scorer import CompositeScorer
+from back_testing.data.data_provider import DataProvider
 
 class CompositeRotator:
     """
@@ -16,26 +17,28 @@ class CompositeRotator:
     3. 等权20%持仓
     """
 
-    def __init__(self, data_path: str, initial_capital: float = 1000000.0,
+    def __init__(self, initial_capital: float = 1000000.0,
                  n_stocks: int = 5, use_multi_factor: bool = True):
-        self.data_path = data_path
         self.initial_capital = initial_capital
         self.n_stocks = n_stocks
         self.per_stock_capital = initial_capital / n_stocks
         self.use_multi_factor = use_multi_factor
 
-        self.composite_selector = CompositeSelector(data_path)
+        self.composite_selector = CompositeSelector()
         self.composite_scorer = CompositeScorer()
 
         # Multi-factor selector
         if use_multi_factor:
             self.factor_weights = get_factor_weights()
             self.factor_directions = get_factor_directions()
+            self.factor_loader = FactorLoader(
+                data_provider=DataProvider()
+            )
             self.factor_selector = MultiFactorSelector(
                 weights=self.factor_weights,
-                directions=self.factor_directions
+                directions=self.factor_directions,
+                data_provider=self.factor_loader.data_provider
             )
-            self.factor_loader = FactorLoader()
 
         self.current_stocks = []
         self.current_positions = {}
@@ -53,19 +56,24 @@ class CompositeRotator:
         """使用多因子选股"""
         try:
             # 加载所有股票因子数据
+            print(f"    [多因子] 正在加载全市场股票因子数据... date={date.strftime('%Y-%m-%d')}", flush=True)
             factors = list(self.factor_weights.keys())
             factor_data = self.factor_loader.load_all_stock_factors(date, factors)
+            print(f"    [多因子] 因子数据加载完成，共 {len(factor_data)} 只股票", flush=True)
 
             if len(factor_data) == 0:
                 print("警告：未获取到因子数据，切换到综合评分策略")
                 return self._select_stocks_composite(date)
 
             # 使用多因子选择器选股
+            print(f"    [多因子] 正在计算因子评分并选股...", flush=True)
             selected = self.factor_selector.select_top_stocks(
                 data=factor_data,
                 n=self.n_stocks,
-                excluded=self.current_stocks  # 排除已有持仓
+                excluded=self.current_stocks,  # 排除已有持仓
+                date=date
             )
+            print(f"    [多因子] 选取完成，结果: {selected}", flush=True)
 
             self.current_stocks = selected
             print(f"多因子选取结果: {selected}")

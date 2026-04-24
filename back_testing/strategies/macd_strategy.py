@@ -1,5 +1,6 @@
 from pandas import DataFrame
 from back_testing.core.backtest_engine import BacktestEngine
+from data_column_names import MACD_DIF, MACD_DEA
 import numpy as np
 
 
@@ -18,8 +19,8 @@ class MACDStrategy(BacktestEngine):
         """生成MACD交易信号"""
         df = self.data.copy()
 
-        dif_col = 'MACD_DIF'
-        dea_col = 'MACD_DEA'
+        dif_col = MACD_DIF
+        dea_col = MACD_DEA
 
         # 金叉：DIF上穿DEA
         golden_cross = (df[dif_col] > df[dea_col]) & (df[dif_col].shift(1) <= df[dea_col].shift(1))

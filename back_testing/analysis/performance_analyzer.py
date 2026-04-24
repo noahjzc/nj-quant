@@ -46,9 +46,9 @@ class PerformanceAnalyzer:
 
     def calculate_metrics(self) -> Dict:
         """计算所有绩效指标"""
-        # Extract sell trades with returns
-        sell_trades = [t for t in self.trades if t.get('action') == 'sell' and 'return' in t]
-        returns = [t['return'] for t in sell_trades]
+        # Extract completed trades with returns (any action type with a return field)
+        completed_trades = [t for t in self.trades if 'return' in t]
+        returns = [t['return'] for t in completed_trades]
 
         metrics = {
             'total_return': self._calculate_total_return(returns),
