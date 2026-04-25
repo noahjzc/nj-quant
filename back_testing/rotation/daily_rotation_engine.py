@@ -197,6 +197,37 @@ class DailyRotationEngine:
 
         for stock_code, position in self.positions.items():
             if stock_code not in stock_data:
+                # 停牌股：无法获取当日价格，用缓存中最后一日收盘价平仓
+                if stock_code in self._stock_cache and not self._stock_cache[stock_code].empty:
+                    df_cached = self._stock_cache[stock_code]
+                    price = df_cached['close'].iloc[-1]
+                    if price > 0:
+                        shares, cost = self.trade_executor.execute_sell(stock_code, price, position.shares)
+                        if shares > 0:
+                            buy_price = position.buy_price
+                            holding_days = (pd.Timestamp(date_str) - pd.Timestamp(position.buy_date)).days
+                            return_pct = (price - buy_price) / buy_price * 100 if buy_price > 0 else 0
+                            pnl = (price - buy_price) * shares - cost
+                            capital_before_sell = self.current_capital
+
+                            trade = TradeRecord(
+                                date=date_str,
+                                stock_code=stock_code,
+                                action='SELL',
+                                price=price,
+                                shares=shares,
+                                cost=cost,
+                                capital_before=capital_before_sell
+                            )
+                            sell_trades.append(trade)
+                            self.trade_history.append(trade)
+                            del self.positions[stock_code]
+
+                            logger.info(
+                                f"[SELL/SUSPENDED] {date_str} {stock_code} @ {price:.3f} x {shares}股 "
+                                f"买价:{buy_price:.3f} 持有:{holding_days}天 收益:{return_pct:+.2f}% "
+                                f"PnL:{pnl:+,.0f} (卖前现金:{capital_before_sell:,.0f})"
+                            )
                 continue
             df = stock_data[stock_code]
             if df.empty or len(df) < 2:
