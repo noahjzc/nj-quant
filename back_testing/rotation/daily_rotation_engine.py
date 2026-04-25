@@ -540,10 +540,13 @@ class DailyRotationEngine:
                 if not combined.empty:
                     combined = combined[~combined.index.isin(cache.index)]
                     if not combined.empty:
-                        cache = pd.concat([cache, combined], sort=False)
+                        combined = combined.dropna(axis=1, how='all')
+                        if not combined.empty:
+                            cache = pd.concat([cache, combined], sort=False)
                 self._stock_cache[stock_code] = cache
             else:
-                self._stock_cache[stock_code] = pd.concat(new_rows, sort=False)
+                combined = pd.concat(new_rows, sort=False)
+                self._stock_cache[stock_code] = combined.dropna(axis=1, how='all') if not combined.empty else combined
 
     def _get_daily_stock_data(self, date: pd.Timestamp) -> Dict[str, pd.DataFrame]:
         """获取当日全市场日线数据（仅返回缓存中≥20个交易日的成熟股）"""
