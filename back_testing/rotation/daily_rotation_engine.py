@@ -148,24 +148,28 @@ class DailyRotationEngine:
 
         # 获取持仓快照（代码→当前价）
         current_prices = {code: df['close'].iloc[-1] for code, df in filtered_data.items() if not df.empty}
+
+        # Step 1: 检查持仓卖出信号
+        sell_trades = self._check_and_sell(date_str, filtered_data, current_prices)
+
+        # 更新现金（卖出）
+        for trade in sell_trades:
+            self.current_capital += trade.shares * trade.price - trade.cost
+
+        # Step 2: 扫描买入信号
+        buy_candidates = self._scan_buy_candidates(filtered_data)
+
+        # Step 3: 重新计算 total_asset（此时包含卖出后的现金更新）
         total_asset = self.current_capital + self.position_manager.get_position_value(
             {p.stock_code: p.shares for p in self.positions.values()},
             current_prices
         )
         self.position_manager.update_capital(total_asset)
 
-        # Step 1: 检查持仓卖出信号
-        sell_trades = self._check_and_sell(date_str, filtered_data, current_prices)
-
-        # Step 2: 扫描买入信号
-        buy_candidates = self._scan_buy_candidates(filtered_data)
-
-        # Step 3: 多因子排序，买入 TOP X
+        # Step 4: 多因子排序，买入 TOP X
         buy_trades, top_stocks_info = self._execute_buy(date_str, filtered_data, buy_candidates, max_positions, current_prices, total_asset)
 
-        # 更新现金
-        for trade in sell_trades:
-            self.current_capital += trade.shares * trade.price - trade.cost
+        # 更新现金（买入）
         for trade in buy_trades:
             self.current_capital -= trade.shares * trade.price + trade.cost
 
