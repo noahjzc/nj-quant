@@ -410,10 +410,12 @@ class DailyRotationEngine:
                 self._stock_cache[stock_code] = pd.concat(new_rows, sort=False)
 
     def _get_daily_stock_data(self, date: pd.Timestamp) -> Dict[str, pd.DataFrame]:
-        """获取当日全市场日线数据（从滚动缓存返回，date 当日已由 _advance_to_date 预加载）"""
+        """获取当日全市场日线数据（仅返回缓存中≥20个交易日的成熟股）"""
         result = {}
         for code, df in self._stock_cache.items():
             if df.empty:
+                continue
+            if len(df) < self.MIN_TRADING_DAYS:
                 continue
             if date in df.index:
                 result[code] = df
