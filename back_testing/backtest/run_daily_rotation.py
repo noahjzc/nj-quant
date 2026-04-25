@@ -46,8 +46,15 @@ def run(start_date: str, end_date: str, config: RotationConfig = None, verbose: 
             'regime': r.market_regime,
         } for r in results])
 
+        # Convert TradeRecord to dict for PerformanceAnalyzer compatibility
+        trades_dicts = [
+            {'action': t.action.lower(), 'price': t.price, 'shares': t.shares,
+             'return': 0.0}  # win_rate uses equity_curve; return from trades is secondary
+            for t in engine.trade_history
+        ]
+
         analyzer = PerformanceAnalyzer(
-            trades=engine.trade_history,
+            trades=trades_dicts,
             initial_capital=config.initial_capital,
             equity_curve=[config.initial_capital] + df['total_asset'].tolist(),
             periods_per_year=252
