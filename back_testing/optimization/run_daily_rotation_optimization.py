@@ -444,13 +444,13 @@ def _print_wf_summary(records: List[Dict]):
     print(f"\n{'=' * 60}")
     print("Walk-Forward 汇总")
     print(f"{'=' * 60}")
-    test_sharpes = [r['test_sharpe'] for r in records if r['test_sharpe'] > 0]
-    if test_sharpes:
-        print(f"窗口数: {len(records)}")
-        print(f"测试 Sharpe 均值: {np.mean(test_sharpes):.4f}")
-        print(f"测试 Sharpe 中位数: {np.median(test_sharpes):.4f}")
-        print(f"测试 Sharpe 标准差: {np.std(test_sharpes):.4f}")
-        print(f"正 Sharpe 窗口: {sum(1 for s in test_sharpes if s > 0)}/{len(test_sharpes)}")
+    test_sharpes = [r['test_sharpe'] for r in records]
+    positive_count = sum(1 for s in test_sharpes if s > 0)
+    print(f"窗口数: {len(records)}")
+    print(f"测试 Sharpe 均值: {np.mean(test_sharpes):.4f}")
+    print(f"测试 Sharpe 中位数: {np.median(test_sharpes):.4f}")
+    print(f"测试 Sharpe 标准差: {np.std(test_sharpes):.4f}")
+    print(f"正 Sharpe 窗口: {positive_count}/{len(records)}")
 
 
 def _save_wf_results(records: List[Dict], output_dir: str = None):
