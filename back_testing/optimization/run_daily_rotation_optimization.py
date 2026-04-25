@@ -71,8 +71,6 @@ def compute_sharpe(equity: List[float], periods_per_year: int = 252) -> float:
 ALL_SIGNAL_TYPES = ['KDJ_GOLD', 'MACD_GOLD', 'MA_GOLD', 'VOL_GOLD', 'BOLL_BREAK', 'HIGH_BREAK']
 
 # 固定参数（不参与优化）
-FIXED_SELL_SIGNALS = ['KDJ_DEATH', 'MACD_DEATH', 'MA_DEATH', 'VOL_DEATH',
-                      'BOLL_BREAK_DOWN', 'HIGH_BREAK_DOWN']
 FIXED_FACTOR_DIRECTIONS = {
     'RSI_1': 1, 'RET_20': 1, 'VOLUME_RATIO': 1,
     'PB': -1, 'PE_TTM': -1, 'OVERHEAT': -1,
@@ -93,7 +91,7 @@ def sample_config(trial: optuna.Trial, base_config: RotationConfig = None) -> Ro
 
     # --- 因子权重：独立采样后归一化 ---
     raw_weights = {}
-    for factor in ['RSI_1', 'RET_20', 'VOLUME_RATIO', 'PB', 'PE_TTM', 'OVERHEAT']:
+    for factor in FIXED_FACTOR_DIRECTIONS:
         raw_weights[factor] = trial.suggest_float(f'weight_{factor}', 0.01, 0.40)
     total = sum(raw_weights.values())
     rank_factor_weights = {k: v / total for k, v in raw_weights.items()}
@@ -104,10 +102,10 @@ def sample_config(trial: optuna.Trial, base_config: RotationConfig = None) -> Ro
         on = trial.suggest_categorical(f'signal_{sig}', ['on', 'off'])
         if on == 'on':
             active_signals.append(sig)
+    # 始终建议 fallback 信号以保持参数空间一致性（TPE 需要）
+    fallback_signal = trial.suggest_categorical('fallback_signal', ALL_SIGNAL_TYPES)
     if not active_signals:
-        # 极少数情况，随机选一个开启
-        fallback = trial.suggest_categorical('_signal_fallback', ALL_SIGNAL_TYPES)
-        active_signals.append(fallback)
+        active_signals.append(fallback_signal)
 
     # --- 信号逻辑模式 ---
     buy_signal_mode = trial.suggest_categorical('buy_signal_mode', ['OR', 'AND'])
