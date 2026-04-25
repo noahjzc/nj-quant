@@ -141,7 +141,7 @@ class DailyRotationEngine:
         # 获取当日全市场日线
         stock_data = self._get_daily_stock_data(date)
         if not stock_data:
-            return DailyResult(date_str, self.current_capital, self.current_capital, self.positions, [], regime_name)
+            return DailyResult(date_str, self.current_capital, self.current_capital, self.positions, [], regime_name, self.current_capital)
 
         # 过滤股票池
         filtered_data = self._filter_stock_pool(stock_data)
