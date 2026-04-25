@@ -387,7 +387,7 @@ class DailyRotationEngine:
         if not self._all_codes:
             return
 
-        start = (first_date - pd.Timedelta(days=30)).strftime('%Y-%m-%d')
+        start = (first_date - pd.Timedelta(days=self.PRELOAD_DAYS)).strftime('%Y-%m-%d')
         end = first_date.strftime('%Y-%m-%d')
 
         histories = self.data_provider.get_batch_histories(
