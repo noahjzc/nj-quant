@@ -461,3 +461,62 @@ def _save_wf_results(records: List[Dict], output_dir: str = None):
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(records, f, indent=2, ensure_ascii=False)
     print(f"Walk-Forward 结果已保存: {path}")
+
+
+# ═══════════════════════════════════════════════
+# CLI 入口
+# ═══════════════════════════════════════════════
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description='Daily Rotation 参数优化（Optuna）',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+示例:
+  # 单期优化
+  python back_testing/optimization/run_daily_rotation_optimization.py \\
+      --mode single --start 2024-01-01 --end 2024-12-31 --trials 100
+
+  # Walk-Forward 优化
+  python back_testing/optimization/run_daily_rotation_optimization.py \\
+      --mode walkforward --start 2022-01-01 --end 2024-12-31 --trials 50
+        """
+    )
+    parser.add_argument('--mode', choices=['single', 'walkforward'], default='single',
+                        help='优化模式: single=单期, walkforward=滚动窗口')
+    parser.add_argument('--start', default='2024-01-01', help='开始日期')
+    parser.add_argument('--end', default='2024-12-31', help='结束日期')
+    parser.add_argument('--trials', type=int, default=100, help='每次优化的 Trial 数')
+    parser.add_argument('--output', default='.', help='结果输出目录')
+    parser.add_argument('--train-months', type=int, default=12, help='WF 训练期（月）')
+    parser.add_argument('--test-months', type=int, default=6, help='WF 测试期（月）')
+    parser.add_argument('--step-months', type=int, default=3, help='WF 步进（月）')
+    parser.add_argument('--verbose', action='store_true', help='详细日志')
+
+    args = parser.parse_args()
+
+    if args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+        logging.getLogger('back_testing.rotation').setLevel(logging.DEBUG)
+
+    base_config = RotationConfig()
+
+    if args.mode == 'single':
+        run_single_optimization(
+            start_date=args.start,
+            end_date=args.end,
+            n_trials=args.trials,
+            base_config=base_config,
+            output_dir=args.output,
+        )
+    else:
+        run_walk_forward(
+            start_date=args.start,
+            end_date=args.end,
+            n_trials=args.trials,
+            base_config=base_config,
+            train_months=args.train_months,
+            test_months=args.test_months,
+            step_months=args.step_months,
+            output_dir=args.output,
+        )
