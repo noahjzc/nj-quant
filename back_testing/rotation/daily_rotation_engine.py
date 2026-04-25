@@ -10,11 +10,27 @@ from back_testing.data.data_provider import DataProvider
 
 logger = logging.getLogger(__name__)
 from back_testing.rotation.config import RotationConfig
+
+
+def compute_overheat(
+    rsi: float,
+    ret5: float,
+    rsi_threshold: float = 75.0,
+    ret5_threshold: float = 0.15
+) -> float:
+    """计算过热度（0~1）。仅当 RSI 和短期涨幅双高时返回正值。"""
+    if not (rsi > rsi_threshold and ret5 > ret5_threshold):
+        return 0.0
+
+    rsi_component = max(0.0, (rsi - rsi_threshold) / (100 - rsi_threshold))
+    ret_component = min(1.0, max(0.0, (ret5 - ret5_threshold) / 0.35))
+    return (rsi_component + ret_component) / 2.0
 from back_testing.rotation.signal_engine.signal_filter import SignalFilter
 from back_testing.rotation.signal_engine.signal_ranker import SignalRanker
 from back_testing.rotation.market_regime import MarketRegime
 from back_testing.rotation.position_manager import RotationPositionManager
 from back_testing.rotation.trade_executor import TradeExecutor, TradeRecord
+from back_testing.risk.stop_loss_strategies import StopLossStrategies
 
 
 @dataclass
@@ -24,6 +40,7 @@ class Position:
     shares: int
     buy_price: float
     buy_date: str
+    highest_price: float = 0.0  # 持仓期间最高价（用于移动止损）
 
 
 @dataclass
@@ -66,8 +83,14 @@ class DailyRotationEngine:
             max_position_pct=config.max_position_pct
         )
         self.trade_executor = TradeExecutor()
-        self.buy_filter = SignalFilter(config.buy_signal_types)
+        self.buy_filter = SignalFilter(config.buy_signal_types, mode=config.buy_signal_mode)
         self.sell_filter = SignalFilter(config.sell_signal_types)
+        # ATR 止损止盈参数
+        self.atr_period = config.atr_period
+        self.stop_loss_mult = config.stop_loss_mult
+        self.take_profit_mult = config.take_profit_mult
+        self.trailing_pct = config.trailing_pct
+        self.trailing_start = config.trailing_start
         self.ranker = SignalRanker(config.rank_factor_weights, config.rank_factor_directions)
         self.market_regime = MarketRegime(config.market_regime, self.data_provider)
 
@@ -149,15 +172,22 @@ class DailyRotationEngine:
         # 获取持仓快照（代码→当前价）
         current_prices = {code: df['close'].iloc[-1] for code, df in filtered_data.items() if not df.empty}
 
-        # Step 1: 检查持仓卖出信号
+        # Step 1: 更新持仓期间最高价
+        for stock_code, position in self.positions.items():
+            current_price = current_prices.get(stock_code, 0.0)
+            if current_price > position.highest_price:
+                position.highest_price = current_price
+
+        # Step 2: 检查持仓卖出信号
         sell_trades = self._check_and_sell(date_str, filtered_data, current_prices)
 
         # 更新现金（卖出）
         for trade in sell_trades:
             self.current_capital += trade.shares * trade.price - trade.cost
 
-        # Step 2: 扫描买入信号
-        buy_candidates = self._scan_buy_candidates(filtered_data)
+        # Step 2: 扫描买入信号（排除当日已卖出的股票，防止同日来回交易）
+        sold_today = [t.stock_code for t in sell_trades]
+        buy_candidates = self._scan_buy_candidates(filtered_data, exclude_codes=sold_today)
 
         # Step 3: 重新计算 total_asset（此时包含卖出后的现金更新）
         total_asset = self.current_capital + self.position_manager.get_position_value(
@@ -170,6 +200,12 @@ class DailyRotationEngine:
         buy_trades, top_stocks_info = self._execute_buy(date_str, filtered_data, buy_candidates, max_positions, current_prices, total_asset)
 
         all_trades = sell_trades + buy_trades
+
+        # 重新计算 total_asset，反映买入后的实际资产（含手续费扣减）
+        total_asset = self.current_capital + self.position_manager.get_position_value(
+            {p.stock_code: p.shares for p in self.positions.values()},
+            current_prices
+        )
 
         # 每日日志
         self._log_daily_summary(date_str, regime_name, total_asset, self.current_capital,
@@ -234,7 +270,34 @@ class DailyRotationEngine:
                 continue
 
             if self.sell_filter.filter_sell(df, stock_code):
-                positions_to_close.append(stock_code)
+                if stock_code not in positions_to_close:
+                    positions_to_close.append(stock_code)
+
+            # ATR 止损/止盈/移动止损检查
+            current_price = current_prices.get(stock_code, 0.0)
+            if current_price > 0:
+                try:
+                    atr = StopLossStrategies.calculate_atr(df, period=self.atr_period)
+                except Exception:
+                    atr = 0.0
+                if atr > 0:
+                    exit_result = StopLossStrategies.check_exit(
+                        position={'buy_price': position.buy_price},
+                        current_price=current_price,
+                        atr=atr,
+                        highest_price=position.highest_price,
+                        stop_loss_mult=self.stop_loss_mult,
+                        take_profit_mult=self.take_profit_mult,
+                        trailing_pct=self.trailing_pct,
+                        trailing_start=self.trailing_start,
+                    )
+                    if exit_result['action'] in ('stop_loss', 'trailing_stop'):
+                        if stock_code not in positions_to_close:
+                            positions_to_close.append(stock_code)
+                        logger.info(
+                            f"[EXIT] {date_str} {stock_code} @ {current_price:.3f} "
+                            f"原因:{exit_result['reason']}"
+                        )
 
         for stock_code in positions_to_close:
             position = self.positions[stock_code]
@@ -272,11 +335,14 @@ class DailyRotationEngine:
 
         return sell_trades
 
-    def _scan_buy_candidates(self, stock_data: Dict[str, pd.DataFrame]) -> List[str]:
+    def _scan_buy_candidates(self, stock_data: Dict[str, pd.DataFrame], exclude_codes: List[str] = None) -> List[str]:
         """扫描全市场，返回有买入信号的股票代码"""
+        exclude_set = set(exclude_codes) if exclude_codes else set()
         candidates = []
         for stock_code, df in stock_data.items():
             if stock_code in self.positions:
+                continue
+            if stock_code in exclude_set:
                 continue
             if df.empty or len(df) < 2:
                 continue
@@ -308,6 +374,13 @@ class DailyRotationEngine:
                 continue
             row = df.iloc[-1]
             factor_row = {}
+
+            # 计算 RET_5（OVERHEAT 计算需要）
+            if len(df) >= 5 and 'close' in df.columns:
+                ret5 = row['close'] / df['close'].iloc[-5] - 1
+            else:
+                ret5 = 0.0
+
             for factor in self.ranker.factor_weights.keys():
                 if factor == 'RET_20':
                     # 20日收益率 = 当日收盘 / 20日前收盘 - 1
@@ -315,6 +388,16 @@ class DailyRotationEngine:
                         factor_row[factor] = row['close'] / df['close'].iloc[-20] - 1
                     else:
                         factor_row[factor] = np.nan
+                elif factor == 'OVERHEAT':
+                    rsi_val = row.get('rsi_1', np.nan)
+                    if pd.notna(rsi_val):
+                        factor_row[factor] = compute_overheat(
+                            float(rsi_val), ret5,
+                            self.config.overheat_rsi_threshold,
+                            self.config.overheat_ret5_threshold
+                        )
+                    else:
+                        factor_row[factor] = 0.0
                 elif factor in row.index:
                     val = row[factor]
                     factor_row[factor] = val if val == val else np.nan  # NaN check
@@ -327,7 +410,6 @@ class DailyRotationEngine:
         ranked = self.ranker.rank(factor_df, top_n=x)
 
         existing_positions = {p.stock_code: p.shares for p in self.positions.values()}
-        capital_before_buy = self.current_capital
 
         # 阶段一：预计算每个候选股的可用性，确定最终能买哪些
         capital_remaining = self.current_capital
@@ -362,6 +444,7 @@ class DailyRotationEngine:
 
         # 阶段二：执行选中股票的买入（从阶段一结果中扣除现金）
         for stock_code, price, shares, cost, capital_needed in selected:
+            capital_before_this = self.current_capital
             self.current_capital -= capital_needed
 
             trade = TradeRecord(
@@ -371,7 +454,7 @@ class DailyRotationEngine:
                 price=price,
                 shares=shares,
                 cost=cost,
-                capital_before=capital_before_buy
+                capital_before=capital_before_this
             )
             buy_trades.append(trade)
             self.trade_history.append(trade)
@@ -380,7 +463,8 @@ class DailyRotationEngine:
                 stock_code=stock_code,
                 shares=shares,
                 buy_price=price,
-                buy_date=date_str
+                buy_date=date_str,
+                highest_price=price,
             )
 
             logger.info(
@@ -398,19 +482,16 @@ class DailyRotationEngine:
         return buy_trades, top_stocks_info
 
     def _get_trading_dates(self) -> List[pd.Timestamp]:
-        """获取回测区间内的交易日列表"""
-        if not self._all_codes:
-            return []
-
-        df = self.data_provider.get_stock_data(
-            self._all_codes[0],
+        """获取回测区间内的交易日列表（使用基准指数确保完整性）"""
+        index_df = self.data_provider.get_index_data(
+            self.config.benchmark_index,
             start_date=self.start_date,
             end_date=self.end_date
         )
-        if df is None or df.empty:
+        if index_df is None or index_df.empty:
             return []
 
-        dates = sorted(df.index.unique())
+        dates = sorted(index_df.index.unique())
         return [pd.Timestamp(d) for d in dates]
 
     def _preload_histories(self, first_date: pd.Timestamp):
@@ -439,9 +520,10 @@ class DailyRotationEngine:
             return
 
         # 检测停牌：当日无交易的股票清空缓存（退市同理）
+        # 但保留仍持仓的股票缓存，以便 _check_and_sell 能强制卖出停牌股
         trading_codes = set(day_data.keys())
         for code in list(self._stock_cache.keys()):
-            if code not in trading_codes:
+            if code not in trading_codes and code not in self.positions:
                 del self._stock_cache[code]
 
         # 按股票代码分组，一次性 concat
@@ -455,9 +537,10 @@ class DailyRotationEngine:
             if stock_code in self._stock_cache:
                 cache = self._stock_cache[stock_code]
                 combined = pd.concat(new_rows, sort=False)
-                combined = combined[~combined.index.isin(cache.index)]
                 if not combined.empty:
-                    cache = pd.concat([cache, combined], sort=False)
+                    combined = combined[~combined.index.isin(cache.index)]
+                    if not combined.empty:
+                        cache = pd.concat([cache, combined], sort=False)
                 self._stock_cache[stock_code] = cache
             else:
                 self._stock_cache[stock_code] = pd.concat(new_rows, sort=False)

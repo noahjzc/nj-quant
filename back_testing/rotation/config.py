@@ -19,9 +19,9 @@ class MarketRegimeConfig:
     high_volatility_threshold: float = 0.03  # 高波动率阈值（3%）
     lookback_period: int = 20               # 大盘动量回溯期
     regime_params: Dict[str, MarketRegimeParams] = field(default_factory=lambda: {
-        'strong':  MarketRegimeParams(max_total_pct=1.00, max_position_pct=0.20, max_positions=5),
-        'neutral': MarketRegimeParams(max_total_pct=0.60, max_position_pct=0.15, max_positions=4),
-        'weak':    MarketRegimeParams(max_total_pct=0.30, max_position_pct=0.10, max_positions=3),
+        'strong':  MarketRegimeParams(max_total_pct=1.00, max_position_pct=0.20, max_positions=8),
+        'neutral': MarketRegimeParams(max_total_pct=0.60, max_position_pct=0.15, max_positions=6),
+        'weak':    MarketRegimeParams(max_total_pct=0.30, max_position_pct=0.10, max_positions=4),
     })
 
 
@@ -36,20 +36,22 @@ class RotationConfig:
     max_positions: int = 5
     # 信号配置
     buy_signal_types: List[str] = field(default_factory=lambda: [
-        'KDJ_GOLD', 'MACD_GOLD', 'MA_GOLD', 'VOL_GOLD', 'DMI_GOLD',
+        'KDJ_GOLD', 'MACD_GOLD', 'MA_GOLD', 'VOL_GOLD',
         'BOLL_BREAK', 'HIGH_BREAK'
     ])
+    buy_signal_mode: str = 'OR'  # 'OR': 任意信号触发 | 'AND': 所有信号同时触发
     sell_signal_types: List[str] = field(default_factory=lambda: [
-        'KDJ_DEATH', 'MACD_DEATH', 'MA_DEATH', 'VOL_DEATH', 'DMI_DEATH',
+        'KDJ_DEATH', 'MACD_DEATH', 'MA_DEATH', 'VOL_DEATH',
         'BOLL_BREAK_DOWN', 'HIGH_BREAK_DOWN'
     ])
     # 排序因子及权重
     rank_factor_weights: Dict[str, float] = field(default_factory=lambda: {
         'RSI_1': 0.20,
-        'RET_20': 0.25,
+        'RET_20': 0.15,
         'VOLUME_RATIO': 0.15,
-        'PB': 0.20,
-        'PE_TTM': 0.20,
+        'PB': 0.25,
+        'PE_TTM': 0.25,
+        'OVERHEAT': 0.20,
     })
     rank_factor_directions: Dict[str, int] = field(default_factory=lambda: {
         'RSI_1': 1,
@@ -57,6 +59,7 @@ class RotationConfig:
         'VOLUME_RATIO': 1,
         'PB': -1,
         'PE_TTM': -1,
+        'OVERHEAT': -1,
     })
     # 市场状态调节
     market_regime: MarketRegimeConfig = field(default_factory=MarketRegimeConfig)
@@ -67,3 +70,12 @@ class RotationConfig:
     exclude_suspended: bool = True
     # 大盘指数代码
     benchmark_index: str = 'sh000300'
+    # ATR 止损止盈参数（StopLossStrategies）
+    atr_period: int = 14
+    stop_loss_mult: float = 2.0    # 止损 = 买入价 - stop_loss_mult × ATR
+    take_profit_mult: float = 3.0 # 止盈 = 买入价 + take_profit_mult × ATR
+    trailing_pct: float = 0.10     # 移动止损幅度：最高价 × (1 - trailing_pct)
+    trailing_start: float = 0.05   # 移动止损启动门槛：5% 浮盈后生效
+    # 过热度惩罚
+    overheat_rsi_threshold: float = 75.0     # RSI 超买阈值
+    overheat_ret5_threshold: float = 0.15    # 5日涨幅阈值
