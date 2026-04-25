@@ -378,15 +378,20 @@ class DailyRotationEngine:
                 self._stock_cache[code] = df.copy()
 
     def _advance_to_date(self, date: pd.Timestamp):
-        """推进到指定日期：加载当日数据，追加到滚动缓存，裁剪超长窗口"""
+        """推进到指定日期：加载当日数据，追加到滚动缓存"""
         date_str = date.strftime('%Y-%m-%d')
 
-        # 批量获取当日全市场数据（一条SQL，~0.3秒）
         day_data = self.data_provider.get_stocks_for_date(self._all_codes, date_str)
         if not day_data:
             return
 
-        # 按股票代码分组，一次性 concat（避免每日5000次 concat）
+        # 检测停牌：当日无交易的股票清空缓存（退市同理）
+        trading_codes = set(day_data.keys())
+        for code in list(self._stock_cache.keys()):
+            if code not in trading_codes:
+                del self._stock_cache[code]
+
+        # 按股票代码分组，一次性 concat
         from collections import defaultdict
         rows_by_code: Dict[str, list] = defaultdict(list)
         for stock_code, row_data in day_data.items():
@@ -397,15 +402,11 @@ class DailyRotationEngine:
             if stock_code in self._stock_cache:
                 cache = self._stock_cache[stock_code]
                 combined = pd.concat(new_rows, sort=False)
-                # 避免重复追加
                 combined = combined[~combined.index.isin(cache.index)]
                 if not combined.empty:
                     cache = pd.concat([cache, combined], sort=False)
-                if len(cache) > 20:
-                    cache = cache.tail(20)
                 self._stock_cache[stock_code] = cache
             else:
-                # 新股：加入缓存（首日预加载已保证有历史数据）
                 self._stock_cache[stock_code] = pd.concat(new_rows, sort=False)
 
     def _get_daily_stock_data(self, date: pd.Timestamp) -> Dict[str, pd.DataFrame]:
