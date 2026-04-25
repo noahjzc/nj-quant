@@ -117,11 +117,6 @@ class DailyRotationEngine:
     ):
         """每日汇总日志"""
         position_value = total_asset - cash
-        # 持仓明细
-        positions_detail = []
-        for code, pos in self.positions.items():
-            pvalue = pos.shares * pos.shares  # placeholder, will be computed below
-            positions_detail.append(f"{code}:{pos.shares}股")
 
         logger.info(
             f"[DAY] {date_str} | 市场:{regime_name} | 候选:{len(buy_candidates)}只 "
