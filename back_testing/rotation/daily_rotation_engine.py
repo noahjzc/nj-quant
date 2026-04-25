@@ -161,7 +161,7 @@ class DailyRotationEngine:
         buy_candidates = self._scan_buy_candidates(filtered_data)
 
         # Step 3: 多因子排序，买入 TOP X
-        buy_trades, top_stocks_info = self._execute_buy(date_str, filtered_data, buy_candidates, max_positions, current_prices)
+        buy_trades, top_stocks_info = self._execute_buy(date_str, filtered_data, buy_candidates, max_positions, current_prices, total_asset)
 
         # 更新现金
         for trade in sell_trades:
@@ -259,9 +259,10 @@ class DailyRotationEngine:
         stock_data: Dict[str, pd.DataFrame],
         candidates: List[str],
         max_positions: int,
-        current_prices: Dict[str, float]
+        current_prices: Dict[str, float],
+        total_asset: float
     ) -> Tuple[List[TradeRecord], List[Dict]]:
-        """对候选股排序，买入 TOP X"""
+        """对候选股排序，买入 TOP X（两阶段资金分配：预计算 + 执行）"""
         buy_trades = []
         top_stocks_info = []
         x = max_positions - len(self.positions)
@@ -297,6 +298,10 @@ class DailyRotationEngine:
         existing_positions = {p.stock_code: p.shares for p in self.positions.values()}
         capital_before_buy = self.current_capital
 
+        # 阶段一：预计算每个候选股的可用性，确定最终能买哪些
+        capital_remaining = self.current_capital
+        selected = []  # (stock_code, price, shares, cost, capital_needed)
+
         for stock_code in ranked:
             price = current_prices.get(stock_code, 0.0)
             if price <= 0:
@@ -304,9 +309,29 @@ class DailyRotationEngine:
             if not self.position_manager.can_buy(stock_code, price, existing_positions, current_prices):
                 continue
 
-            shares, cost = self.trade_executor.execute_buy(stock_code, price, self.current_capital)
+            # 计算可买股数（取资金和仓位的交集）
+            max_shares_by_capital = int(capital_remaining / price)
+            max_shares_by_position = int(total_asset * self.position_manager.max_position_pct / price)
+            shares = min(max_shares_by_capital, max_shares_by_position)
             if shares == 0:
                 continue
+
+            # 计算成本（过户费 + 券商佣金，与 execute_buy 保持一致）
+            buy_value = shares * price
+            transfer_fee = buy_value * self.trade_executor.TRANSFER_FEE
+            brokerage = max(buy_value * self.trade_executor.BROKERAGE, self.trade_executor.MIN_BROKERAGE)
+            cost = transfer_fee + brokerage
+            capital_needed = shares * price + cost
+            if capital_needed > capital_remaining:
+                continue
+
+            selected.append((stock_code, price, shares, cost, capital_needed))
+            capital_remaining -= capital_needed
+            existing_positions[stock_code] = shares
+
+        # 阶段二：执行选中股票的买入（从阶段一结果中扣除现金）
+        for stock_code, price, shares, cost, capital_needed in selected:
+            self.current_capital -= capital_needed
 
             trade = TradeRecord(
                 date=date_str,
@@ -326,19 +351,17 @@ class DailyRotationEngine:
                 buy_price=price,
                 buy_date=date_str
             )
-            existing_positions[stock_code] = shares
-            capital_used = shares * price + cost
 
             logger.info(
                 f"[BUY] {date_str} {stock_code} @ {price:.3f} x {shares}股 "
-                f"资金:{capital_used:,.0f} (剩余现金:{self.current_capital:,.0f})"
+                f"资金:{capital_needed:,.0f} (剩余现金:{self.current_capital:,.0f})"
             )
 
             top_stocks_info.append({
                 'stock_code': stock_code,
                 'price': price,
                 'shares': shares,
-                'capital_used': capital_used,
+                'capital_used': capital_needed,
             })
 
         return buy_trades, top_stocks_info
