@@ -231,7 +231,7 @@ class DailyRotationEngine:
         sell_trades = []
         positions_to_close = []
 
-        for stock_code, position in self.positions.items():
+        for stock_code, position in list(self.positions.items()):
             if stock_code not in stock_data:
                 # 停牌股：无法获取当日价格，用缓存中最后一日收盘价平仓
                 if stock_code in self._stock_cache and not self._stock_cache[stock_code].empty:
