@@ -148,3 +148,48 @@ def sample_config(trial: optuna.Trial, base_config: RotationConfig = None) -> Ro
         overheat_rsi_threshold=overheat_rsi_threshold,
         overheat_ret5_threshold=overheat_ret5_threshold,
     )
+
+
+# ═══════════════════════════════════════════════
+# 目标函数
+# ═══════════════════════════════════════════════
+
+MAX_DRAWDOWN_LIMIT = 0.30
+
+
+def objective(trial: optuna.Trial,
+              start_date: str,
+              end_date: str,
+              base_config: RotationConfig = None) -> float:
+    """Optuna 目标函数：给定 Trial，运行回测，返回年化 Sharpe
+
+    Args:
+        trial: Optuna trial
+        start_date: 回测开始日期 'YYYY-MM-DD'
+        end_date: 回测结束日期 'YYYY-MM-DD'
+        base_config: 基础配置
+
+    Returns:
+        年化 Sharpe Ratio（max_drawdown > 30% 时返回 0）
+    """
+    config = sample_config(trial, base_config)
+
+    try:
+        engine = DailyRotationEngine(config, start_date, end_date)
+        results = engine.run()
+
+        if not results or len(results) < 2:
+            return 0.0
+
+        equity = [config.initial_capital] + [r.total_asset for r in results]
+
+        dd = max_drawdown(equity)
+        if dd > MAX_DRAWDOWN_LIMIT:
+            return 0.0
+
+        sharpe = compute_sharpe(equity, periods_per_year=252)
+        return sharpe if not math.isnan(sharpe) else 0.0
+
+    except Exception:
+        logger.debug(f"Trial {trial.number} failed", exc_info=True)
+        return 0.0
