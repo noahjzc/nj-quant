@@ -20,6 +20,10 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
+import optuna
+from back_testing.rotation.config import RotationConfig
+from back_testing.rotation.daily_rotation_engine import DailyRotationEngine
+
 logging.basicConfig(
     level=logging.WARNING,
     format='%(asctime)s %(levelname)s %(name)s: %(message)s',
@@ -57,3 +61,92 @@ def compute_sharpe(equity: List[float], periods_per_year: int = 252) -> float:
     if len(returns) < 2 or returns.std() == 0:
         return 0.0
     return float(returns.mean() / returns.std() * np.sqrt(periods_per_year))
+
+
+# ═══════════════════════════════════════════════
+# 参数采样
+# ═══════════════════════════════════════════════
+
+# 可优化信号的完整列表
+ALL_SIGNAL_TYPES = ['KDJ_GOLD', 'MACD_GOLD', 'MA_GOLD', 'VOL_GOLD', 'BOLL_BREAK', 'HIGH_BREAK']
+
+# 固定参数（不参与优化）
+FIXED_SELL_SIGNALS = ['KDJ_DEATH', 'MACD_DEATH', 'MA_DEATH', 'VOL_DEATH',
+                      'BOLL_BREAK_DOWN', 'HIGH_BREAK_DOWN']
+FIXED_FACTOR_DIRECTIONS = {
+    'RSI_1': 1, 'RET_20': 1, 'VOLUME_RATIO': 1,
+    'PB': -1, 'PE_TTM': -1, 'OVERHEAT': -1,
+}
+
+
+def sample_config(trial: optuna.Trial, base_config: RotationConfig = None) -> RotationConfig:
+    """从 Optuna Trial 采样一个 RotationConfig
+
+    Args:
+        trial: Optuna trial 对象
+        base_config: 基础配置（固定参数从此继承），None 则用默认值
+
+    Returns:
+        采样后的 RotationConfig
+    """
+    base = base_config or RotationConfig()
+
+    # --- 因子权重：独立采样后归一化 ---
+    raw_weights = {}
+    for factor in ['RSI_1', 'RET_20', 'VOLUME_RATIO', 'PB', 'PE_TTM', 'OVERHEAT']:
+        raw_weights[factor] = trial.suggest_float(f'weight_{factor}', 0.01, 0.40)
+    total = sum(raw_weights.values())
+    rank_factor_weights = {k: v / total for k, v in raw_weights.items()}
+
+    # --- 买入信号开关（至少保留一个） ---
+    active_signals = []
+    for sig in ALL_SIGNAL_TYPES:
+        on = trial.suggest_categorical(f'signal_{sig}', ['on', 'off'])
+        if on == 'on':
+            active_signals.append(sig)
+    if not active_signals:
+        # 极少数情况，随机选一个开启
+        fallback = trial.suggest_categorical('_signal_fallback', ALL_SIGNAL_TYPES)
+        active_signals.append(fallback)
+
+    # --- 信号逻辑模式 ---
+    buy_signal_mode = trial.suggest_categorical('buy_signal_mode', ['OR', 'AND'])
+
+    # --- 连续参数 ---
+    max_total_pct = trial.suggest_float('max_total_pct', 0.30, 1.00)
+    max_position_pct = trial.suggest_float('max_position_pct', 0.05, 0.30)
+    overheat_rsi_threshold = trial.suggest_float('overheat_rsi_threshold', 60.0, 90.0)
+    overheat_ret5_threshold = trial.suggest_float('overheat_ret5_threshold', 0.05, 0.30)
+    stop_loss_mult = trial.suggest_float('stop_loss_mult', 1.0, 3.5)
+    take_profit_mult = trial.suggest_float('take_profit_mult', 2.0, 5.0)
+    trailing_pct = trial.suggest_float('trailing_pct', 0.05, 0.20)
+    trailing_start = trial.suggest_float('trailing_start', 0.02, 0.10)
+
+    # --- 整数参数 ---
+    max_positions = trial.suggest_int('max_positions', 3, 10)
+    atr_period = trial.suggest_int('atr_period', 7, 21)
+
+    return RotationConfig(
+        initial_capital=base.initial_capital,
+        max_total_pct=max_total_pct,
+        max_position_pct=max_position_pct,
+        max_positions=max_positions,
+        buy_signal_types=active_signals,
+        buy_signal_mode=buy_signal_mode,
+        sell_signal_types=base.sell_signal_types,
+        rank_factor_weights=rank_factor_weights,
+        rank_factor_directions=FIXED_FACTOR_DIRECTIONS,
+        market_regime=base.market_regime,
+        exclude_st=base.exclude_st,
+        exclude_limit_up=base.exclude_limit_up,
+        exclude_limit_down=base.exclude_limit_down,
+        exclude_suspended=base.exclude_suspended,
+        benchmark_index=base.benchmark_index,
+        atr_period=atr_period,
+        stop_loss_mult=stop_loss_mult,
+        take_profit_mult=take_profit_mult,
+        trailing_pct=trailing_pct,
+        trailing_start=trailing_start,
+        overheat_rsi_threshold=overheat_rsi_threshold,
+        overheat_ret5_threshold=overheat_ret5_threshold,
+    )
