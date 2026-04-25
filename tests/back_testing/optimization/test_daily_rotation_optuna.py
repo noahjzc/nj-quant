@@ -82,3 +82,49 @@ def test_sample_config_overrides_base():
     trial = study.ask()
     config = sample_config(trial, base_config=base)
     assert config.initial_capital == 500_000
+
+
+import tempfile
+import os
+
+
+def test_run_single_optimization_smoke():
+    """冒烟测试：3 trials 跑通无报错"""
+    from back_testing.optimization.run_daily_rotation_optimization import (
+        run_single_optimization,
+    )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config, sharpe, study = run_single_optimization(
+            start_date='2024-01-01',
+            end_date='2024-02-28',
+            n_trials=3,
+            output_dir=tmpdir,
+        )
+
+        assert isinstance(sharpe, float)
+        assert len(study.trials) == 3
+
+        # 验证输出文件
+        assert os.path.exists(os.path.join(tmpdir, 'best_params.json'))
+        assert os.path.exists(os.path.join(tmpdir, 'optuna_trials.csv'))
+
+
+def test_generate_windows():
+    from back_testing.optimization.run_daily_rotation_optimization import (
+        generate_windows,
+    )
+    import pandas as pd
+
+    windows = generate_windows(
+        pd.Timestamp('2022-01-01'),
+        pd.Timestamp('2024-12-31'),
+        train_months=12,
+        test_months=6,
+        step_months=3,
+    )
+    assert len(windows) > 0
+    for train_s, train_e, test_s, test_e in windows:
+        assert train_s < train_e < test_s < test_e
+        # 训练期约 12 个月
+        delta = (train_e - train_s).days
+        assert 300 < delta < 400, f"train window {delta} days"
