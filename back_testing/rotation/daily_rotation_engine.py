@@ -285,14 +285,18 @@ class DailyRotationEngine:
                 if factor == 'RET_20':
                     # 20日收益率 = 当日收盘 / 20日前收盘 - 1
                     if len(df) >= 20 and 'close' in df.columns:
-                        ret = row['close'] / df['close'].iloc[-20] - 1
-                        factor_row[factor] = ret
+                        factor_row[factor] = row['close'] / df['close'].iloc[-20] - 1
+                    else:
+                        factor_row[factor] = np.nan
                 elif factor in row.index:
-                    factor_row[factor] = row[factor]
-            if factor_row:
-                factor_data_dict[stock_code] = factor_row
+                    val = row[factor]
+                    factor_row[factor] = val if val == val else np.nan  # NaN check
+                else:
+                    factor_row[factor] = np.nan
+            factor_data_dict[stock_code] = factor_row
 
         factor_df = pd.DataFrame(factor_data_dict).T
+        factor_df = factor_df.fillna(0)
         ranked = self.ranker.rank(factor_df, top_n=x)
 
         existing_positions = {p.stock_code: p.shares for p in self.positions.values()}
