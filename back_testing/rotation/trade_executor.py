@@ -13,7 +13,7 @@ class TradeRecord:
     price: float
     shares: int
     cost: float          # 手续费+印花税+过户费
-    capital_after: float  # 交易后现金
+    capital_before: float  # 交易前现金（便于追踪资金变化）
 
 
 class TradeExecutor:

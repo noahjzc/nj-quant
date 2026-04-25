@@ -1,7 +1,7 @@
 """每日全市场轮动回测核心引擎"""
 import pandas as pd
 import numpy as np
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime
 
@@ -174,7 +174,7 @@ class DailyRotationEngine:
                     price=price,
                     shares=shares,
                     cost=cost,
-                    capital_after=self.current_capital
+                    capital_before=self.current_capital
                 )
                 sell_trades.append(trade)
                 self.trade_history.append(trade)
@@ -245,7 +245,7 @@ class DailyRotationEngine:
                 price=price,
                 shares=shares,
                 cost=cost,
-                capital_after=self.current_capital
+                capital_before=self.current_capital
             )
             buy_trades.append(trade)
             self.trade_history.append(trade)
@@ -317,13 +317,14 @@ class DailyRotationEngine:
                     continue
 
             if self.config.exclude_limit_up:
-                limit_up = latest.get('limit_up', False)
-                if limit_up:
+                # 用 change_pct 近似判断涨停（A股涨跌停板 ≈ ±10%）
+                change_pct = latest.get('change_pct', 0.0) or 0.0
+                if change_pct >= 9.9:
                     continue
 
             if self.config.exclude_limit_down:
-                limit_down = latest.get('limit_down', False)
-                if limit_down:
+                change_pct = latest.get('change_pct', 0.0) or 0.0
+                if change_pct <= -9.9:
                     continue
 
             if self.config.exclude_suspended:

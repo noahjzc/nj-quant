@@ -1,7 +1,10 @@
 """第一层信号过滤器 — 技术指标金叉/死叉过滤"""
+import logging
 import pandas as pd
 from typing import List, Dict
 from back_testing.rotation.signal_engine.base_signal import SignalType, SignalResult, BaseSignal
+
+logger = logging.getLogger(__name__)
 
 
 class KDJGoldSignal(BaseSignal):
@@ -123,16 +126,79 @@ class MADeathSignal(BaseSignal):
 
 
 class VOLGoldSignal(BaseSignal):
-    """VOL MA 金叉检测"""
+    """VOL MA 金叉检测（VOL_MA5 上穿 VOL_MA20）"""
 
     def __init__(self):
         super().__init__(SignalType.VOL_GOLD)
 
     def detect(self, df: pd.DataFrame, stock_code: str) -> SignalResult:
-        if 'volume_ratio' not in df.columns:
+        if 'volume' not in df.columns:
             return SignalResult(self.signal_type, stock_code, False, 0.0)
-        vol = df['volume_ratio']
-        triggered = self._cross_up(vol, vol.shift(5).rolling(5).mean())
+        vol = df['volume']
+        vol_ma5 = vol.rolling(5).mean()
+        vol_ma20 = vol.rolling(20).mean()
+        triggered = self._cross_up(vol_ma5, vol_ma20)
+        return SignalResult(
+            signal_type=self.signal_type,
+            stock_code=stock_code,
+            triggered=triggered,
+            strength=1.0 if triggered else 0.0
+        )
+
+
+class VOLDeathSignal(BaseSignal):
+    """VOL MA 死叉检测（VOL_MA5 下穿 VOL_MA20）"""
+
+    def __init__(self):
+        super().__init__(SignalType.VOL_DEATH)
+
+    def detect(self, df: pd.DataFrame, stock_code: str) -> SignalResult:
+        if 'volume' not in df.columns:
+            return SignalResult(self.signal_type, stock_code, False, 0.0)
+        vol = df['volume']
+        vol_ma5 = vol.rolling(5).mean()
+        vol_ma20 = vol.rolling(20).mean()
+        triggered = self._cross_down(vol_ma5, vol_ma20)
+        return SignalResult(
+            signal_type=self.signal_type,
+            stock_code=stock_code,
+            triggered=triggered,
+            strength=1.0 if triggered else 0.0
+        )
+
+
+class DMIGoldSignal(BaseSignal):
+    """DMI 金叉检测（+DI 上穿 -DI）"""
+
+    def __init__(self):
+        super().__init__(SignalType.DMI_GOLD)
+
+    def detect(self, df: pd.DataFrame, stock_code: str) -> SignalResult:
+        if 'dmi_plus_di' not in df.columns or 'dmi_minus_di' not in df.columns:
+            return SignalResult(self.signal_type, stock_code, False, 0.0)
+        plus_di = df['dmi_plus_di']
+        minus_di = df['dmi_minus_di']
+        triggered = self._cross_up(plus_di, minus_di)
+        return SignalResult(
+            signal_type=self.signal_type,
+            stock_code=stock_code,
+            triggered=triggered,
+            strength=1.0 if triggered else 0.0
+        )
+
+
+class DMIDeathSignal(BaseSignal):
+    """DMI 死叉检测（+DI 下穿 -DI）"""
+
+    def __init__(self):
+        super().__init__(SignalType.DMI_DEATH)
+
+    def detect(self, df: pd.DataFrame, stock_code: str) -> SignalResult:
+        if 'dmi_plus_di' not in df.columns or 'dmi_minus_di' not in df.columns:
+            return SignalResult(self.signal_type, stock_code, False, 0.0)
+        plus_di = df['dmi_plus_di']
+        minus_di = df['dmi_minus_di']
+        triggered = self._cross_down(plus_di, minus_di)
         return SignalResult(
             signal_type=self.signal_type,
             stock_code=stock_code,
@@ -142,15 +208,28 @@ class VOLGoldSignal(BaseSignal):
 
 
 class BollBreakSignal(BaseSignal):
-    """布林带上轨突破"""
+    """布林带上轨突破（从 boll_mid 计算，标准差回溯 20 日）"""
+
+    BOLL_PERIOD = 20
 
     def __init__(self):
         super().__init__(SignalType.BOLL_BREAK)
 
     def detect(self, df: pd.DataFrame, stock_code: str) -> SignalResult:
-        if 'close' not in df.columns or 'boll_upper' not in df.columns:
+        if 'close' not in df.columns or 'boll_mid' not in df.columns:
             return SignalResult(self.signal_type, stock_code, False, 0.0)
-        triggered = df['close'].iloc[-1] > df['boll_upper'].iloc[-1] if not df.empty else False
+        if len(df) < self.BOLL_PERIOD:
+            return SignalResult(self.signal_type, stock_code, False, 0.0)
+
+        close = df['close']
+        boll_mid = df['boll_mid']
+        # 计算布林带：用 close 的历史标准差（回溯 BOLL_PERIOD）
+        rolling_std = close.rolling(window=self.BOLL_PERIOD).std()
+        boll_upper = boll_mid + 2 * rolling_std
+        boll_lower = boll_mid - 2 * rolling_std
+
+        current_close = close.iloc[-1]
+        triggered = current_close > boll_upper.iloc[-1]
         return SignalResult(
             signal_type=self.signal_type,
             stock_code=stock_code,
@@ -160,15 +239,84 @@ class BollBreakSignal(BaseSignal):
 
 
 class BollBreakDownSignal(BaseSignal):
-    """布林带下轨突破（卖出）"""
+    """布林带下轨突破（从 boll_mid 计算）"""
+
+    BOLL_PERIOD = 20
 
     def __init__(self):
         super().__init__(SignalType.BOLL_BREAK_DOWN)
 
     def detect(self, df: pd.DataFrame, stock_code: str) -> SignalResult:
-        if 'close' not in df.columns or 'boll_lower' not in df.columns:
+        if 'close' not in df.columns or 'boll_mid' not in df.columns:
             return SignalResult(self.signal_type, stock_code, False, 0.0)
-        triggered = df['close'].iloc[-1] < df['boll_lower'].iloc[-1] if not df.empty else False
+        if len(df) < self.BOLL_PERIOD:
+            return SignalResult(self.signal_type, stock_code, False, 0.0)
+
+        close = df['close']
+        boll_mid = df['boll_mid']
+        rolling_std = close.rolling(window=self.BOLL_PERIOD).std()
+        boll_lower = boll_mid - 2 * rolling_std
+
+        current_close = close.iloc[-1]
+        triggered = current_close < boll_lower.iloc[-1]
+        return SignalResult(
+            signal_type=self.signal_type,
+            stock_code=stock_code,
+            triggered=triggered,
+            strength=1.0 if triggered else 0.0
+        )
+
+
+class HighBreakSignal(BaseSignal):
+    """N 日高点突破（回溯 20 日）"""
+
+    LOOKBACK = 20
+
+    def __init__(self, lookback: int = 20):
+        super().__init__(SignalType.HIGH_BREAK)
+        self.lookback = lookback
+
+    def detect(self, df: pd.DataFrame, stock_code: str) -> SignalResult:
+        if 'close' not in df.columns or 'high' not in df.columns:
+            return SignalResult(self.signal_type, stock_code, False, 0.0)
+        if len(df) < self.lookback + 1:
+            return SignalResult(self.signal_type, stock_code, False, 0.0)
+
+        high_series = df['high']
+        close_series = df['close']
+        # 前 N 日最高价（不含今日）
+        past_high = high_series.iloc[-self.lookback-1:-1].max()
+        current_close = close_series.iloc[-1]
+        triggered = current_close >= past_high
+        return SignalResult(
+            signal_type=self.signal_type,
+            stock_code=stock_code,
+            triggered=triggered,
+            strength=1.0 if triggered else 0.0
+        )
+
+
+class HighBreakDownSignal(BaseSignal):
+    """N 日低点跌破（回溯 20 日）"""
+
+    LOOKBACK = 20
+
+    def __init__(self, lookback: int = 20):
+        super().__init__(SignalType.HIGH_BREAK_DOWN)
+        self.lookback = lookback
+
+    def detect(self, df: pd.DataFrame, stock_code: str) -> SignalResult:
+        if 'close' not in df.columns or 'low' not in df.columns:
+            return SignalResult(self.signal_type, stock_code, False, 0.0)
+        if len(df) < self.lookback + 1:
+            return SignalResult(self.signal_type, stock_code, False, 0.0)
+
+        low_series = df['low']
+        close_series = df['close']
+        # 前 N 日最低价（不含今日）
+        past_low = low_series.iloc[-self.lookback-1:-1].min()
+        current_close = close_series.iloc[-1]
+        triggered = current_close <= past_low
         return SignalResult(
             signal_type=self.signal_type,
             stock_code=stock_code,
@@ -188,20 +336,31 @@ class SignalFilter:
         SignalType.MA_GOLD: MAGoldSignal,
         SignalType.MA_DEATH: MADeathSignal,
         SignalType.VOL_GOLD: VOLGoldSignal,
+        SignalType.VOL_DEATH: VOLDeathSignal,
+        SignalType.DMI_GOLD: DMIGoldSignal,
+        SignalType.DMI_DEATH: DMIDeathSignal,
         SignalType.BOLL_BREAK: BollBreakSignal,
         SignalType.BOLL_BREAK_DOWN: BollBreakDownSignal,
+        SignalType.HIGH_BREAK: HighBreakSignal,
+        SignalType.HIGH_BREAK_DOWN: HighBreakDownSignal,
     }
 
     def __init__(self, signal_types: List[str]):
         self.detectors = []
+        unknown_signals = []
         for name in signal_types:
             try:
                 sig_type = SignalType[name]
                 detector_cls = self._SIGNAL_MAP.get(sig_type)
                 if detector_cls:
                     self.detectors.append(detector_cls())
+                else:
+                    unknown_signals.append(name)
             except KeyError:
-                pass
+                unknown_signals.append(name)
+
+        if unknown_signals:
+            logger.warning(f"SignalFilter: unknown signal types will be ignored: {unknown_signals}")
 
     def filter_buy(self, df: pd.DataFrame, stock_code: str) -> bool:
         """检查是否有任何买入信号触发"""
