@@ -169,10 +169,6 @@ class DailyRotationEngine:
         # Step 4: 多因子排序，买入 TOP X
         buy_trades, top_stocks_info = self._execute_buy(date_str, filtered_data, buy_candidates, max_positions, current_prices, total_asset)
 
-        # 更新现金（买入）
-        for trade in buy_trades:
-            self.current_capital -= trade.shares * trade.price + trade.cost
-
         all_trades = sell_trades + buy_trades
 
         # 每日日志
