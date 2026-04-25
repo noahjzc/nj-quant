@@ -46,8 +46,13 @@ def run(start_date: str, end_date: str, config: RotationConfig = None, verbose: 
             'regime': r.market_regime,
         } for r in results])
 
-        analyzer = PerformanceAnalyzer(trades=engine.trade_history, initial_capital=config.initial_capital)
-        perf = analyzer.analyze(df.set_index('date')['total_asset'])
+        analyzer = PerformanceAnalyzer(
+            trades=engine.trade_history,
+            initial_capital=config.initial_capital,
+            equity_curve=[config.initial_capital] + df['total_asset'].tolist(),
+            periods_per_year=252
+        )
+        perf = analyzer.calculate_metrics()
         print(f"\n绩效指标:")
         print(f"  年化收益率: {perf.get('annual_return', 0):.2%}")
         print(f"  Sharpe: {perf.get('sharpe_ratio', 0):.2f}")
