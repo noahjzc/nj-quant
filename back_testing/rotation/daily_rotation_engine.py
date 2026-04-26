@@ -117,14 +117,16 @@ class DailyRotationEngine:
         for i, date in enumerate(dates):
             date_str = date.strftime('%Y-%m-%d')
             if (i + 1) % 20 == 0:
-                print(f"  [{i+1}/{len(dates)}] {date_str} | 持仓:{len(self.positions)} | 资产:{self.current_capital:,.0f}")
+                prev_asset = self.daily_results[-1].total_asset if self.daily_results else self.config.initial_capital
+                print(f"  [{i+1}/{len(dates)}] {date_str} | 持仓:{len(self.positions)} | 资产:{prev_asset:,.0f}")
 
             # 推进到当日：加载当日数据到滚动缓存
             self._advance_to_date(date)
             result = self._run_single_day(date)
             self.daily_results.append(result)
 
-        print(f"[DailyRotation] 回测完成，最终资产: {self.current_capital:,.0f}")
+        final_asset = self.daily_results[-1].total_asset if self.daily_results else self.current_capital
+        print(f"[DailyRotation] 回测完成，最终资产: {final_asset:,.0f}")
         return self.daily_results
 
     def _log_daily_summary(
