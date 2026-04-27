@@ -20,6 +20,7 @@ Optimizer: 遗传算法主循环
 - 早停(patience): 验证集上连续N代无提升则停止
 """
 import numpy as np
+import time
 from typing import Dict, Callable, Optional
 from back_testing.optimization.genetic_optimizer.population import Population
 from back_testing.optimization.genetic_optimizer.selection import tournament_selection
@@ -92,6 +93,7 @@ class GeneticOptimizer:
                 fitness_func: Callable,
                 train_data,
                 val_data: Optional = None,
+                val_fitness_func: Optional[Callable] = None,
                 verbose: bool = True) -> Dict[str, float]:
         """
         执行遗传算法优化
@@ -109,20 +111,24 @@ class GeneticOptimizer:
 
         Args:
             fitness_func: 适应度函数，签名: (weights_dict, train_data) -> float
-                         返回Calmar比率
+                         返回IR/Calmar比率
             train_data: 训练数据，传递给fitness_func
-            val_data: 验证数据，用于早停判断(可选)
+            val_data: 验证数据，传递给val_fitness_func(可选)
+            val_fitness_func: 验证适应度函数，签名同fitness_func
+                             用于早停判断。为None时回退到训练集适应度(不推荐)
             verbose: 是否打印进度
 
         Returns:
             最优权重字典
         """
         eval_count = 0  # 评估次数计数
+        start_time = time.time()
+        gen_start_time = start_time
 
         # 步骤1: 初始化种群
         population = Population(size=self.population_size)
         if verbose:
-            print(f"[初始化] 种群大小: {self.population_size}")
+            print(f"[初始化] 种群大小: {self.population_size}, 最大代数: {self.max_generations}")
 
         # 步骤2: 评估初始种群适应度
         for chrom in population.individuals:
@@ -130,8 +136,10 @@ class GeneticOptimizer:
             eval_count += 1
 
         if verbose:
+            elapsed = time.time() - start_time
             best = population.get_best()
-            print(f"[评估] 初始种群完成, 最优适应度: {best.fitness if best else 'N/A'}, 评估次数: {eval_count}")
+            ir_str = f"{best.fitness:.4f}" if best and best.fitness is not None else 'N/A'
+            print(f"[代 0/{self.max_generations}] 初始种群完成 | 最优IR: {ir_str} | 耗时: {elapsed:.1f}s | 评估次数: {eval_count}")
 
         # 步骤3: 保留精英
         elite = preserve_elite(population.individuals, self.elite_ratio)
@@ -143,8 +151,7 @@ class GeneticOptimizer:
 
         # 步骤4: 主循环
         for gen in range(self.max_generations):
-            if verbose:
-                print(f"\n--- 第 {gen + 1}/{self.max_generations} 代 ---")
+            gen_start_time = time.time()
 
             new_individuals = []
 
@@ -173,9 +180,6 @@ class GeneticOptimizer:
 
                 new_individuals.extend([child1, child2])
 
-            if verbose:
-                print(f"[变异] 生成 {children_count} 个子代, 累计评估: {eval_count}")
-
             # 替换旧种群
             population.replace_individuals(new_individuals[:self.population_size])
 
@@ -184,16 +188,25 @@ class GeneticOptimizer:
 
             # 当前代最优
             current_best = population.get_best()
+            gen_elapsed = time.time() - gen_start_time
+            total_elapsed = time.time() - start_time
+
             if verbose:
-                print(f"[最优] 当前代最优适应度: {current_best.fitness if current_best else 'N/A'}")
+                ir_str = f"{current_best.fitness:.4f}" if current_best and current_best.fitness is not None else 'N/A'
+                print(f"[代 {gen + 1}/{self.max_generations}] | 最优IR: {ir_str} | 代耗时: {gen_elapsed:.1f}s | 累计: {total_elapsed:.1f}s | 评估: {eval_count}")
 
             # 早停检查
             if val_data is not None:
-                # 在验证集上评估当前最优
-                val_best = max(
-                    c.fitness for c in population.individuals
-                    if c.fitness is not None
-                )
+                # 在验证集上评估当前最优（真正样本外评估）
+                current_best_individual = population.get_best()
+                if val_fitness_func is not None and current_best_individual is not None:
+                    val_best = val_fitness_func(current_best_individual.to_dict(), val_data)
+                else:
+                    # 回退：使用训练集适应度（不推荐，但保持向后兼容）
+                    val_best = max(
+                        c.fitness for c in population.individuals
+                        if c.fitness is not None
+                    )
 
                 if val_best > best_val_fitness:
                     # 有提升，更新最佳
@@ -202,11 +215,11 @@ class GeneticOptimizer:
                     no_improve_count = 0
                     best_weights = population.get_best().to_dict()
                     if verbose:
-                        print(f"[验证] 验证集适应度提升: {val_best:.4f} (+{improvement:.4f})")
+                        print(f"  ↳ [验证] IR提升: {val_best:.4f} (+{improvement:.4f}) ★ 新最优")
                 else:
                     no_improve_count += 1
                     if verbose:
-                        print(f"[验证] 无提升 ({no_improve_count}/{self.patience})")
+                        print(f"  ↳ [验证] 无提升 ({no_improve_count}/{self.patience})")
 
                 # 早停判断
                 if no_improve_count >= self.patience:
@@ -214,17 +227,14 @@ class GeneticOptimizer:
                         print(f"\n=== 早停: 验证集连续{self.patience}代无提升 ===")
                     break
 
-            # 每代都打印进度（verbose模式）
-            if verbose:
-                print(f"[进度] {gen + 1}/{self.max_generations} 代完成, 总评估次数: {eval_count}")
-
         # 返回最优解
         if best_weights is None:
             best_weights = population.get_best().to_dict()
 
         if verbose:
+            total_elapsed = time.time() - start_time
             print(f"\n=== 优化完成 ===")
-            print(f"总评估次数: {eval_count}")
-            print(f"实际迭代代数: {gen + 1}")
+            print(f"总评估次数: {eval_count} | 总耗时: {total_elapsed:.1f}s")
+            print(f"实际迭代代数: {gen + 1}/{self.max_generations}")
 
         return best_weights

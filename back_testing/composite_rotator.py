@@ -1,50 +1,47 @@
 import pandas as pd
-import numpy as np
-from back_testing.selectors.composite_selector import CompositeSelector
+
+from back_testing.base_rotator import BaseRotator
 from back_testing.selectors.multi_factor_selector import MultiFactorSelector
+from back_testing.selectors.stock_selector import StockSelector
 from back_testing.factors.factor_config import get_factor_weights, get_factor_directions
 from back_testing.factors.factor_loader import FactorLoader
 from back_testing.composite_scorer import CompositeScorer
 from back_testing.data.data_provider import DataProvider
 
-class CompositeRotator:
+
+class CompositeRotator(BaseRotator):
     """
     综合评分轮动主控制器
 
     每周流程：
-    1. 使用CompositeSelector对全市场股票计算综合评分
-    2. 选取综合评分最高的5只股票
-    3. 等权20%持仓
+    1. 使用多因子或 CompositeSelector 选股
+    2. 选取评分最高的 N 只股票
+    3. 等权 20% 持仓
     """
 
-    def __init__(self, initial_capital: float = 1000000.0,
+    def __init__(self, initial_capital: float = 1_000_000.0,
                  n_stocks: int = 5, use_multi_factor: bool = True):
-        self.initial_capital = initial_capital
-        self.n_stocks = n_stocks
-        self.per_stock_capital = initial_capital / n_stocks
+        super().__init__(initial_capital, n_stocks)
         self.use_multi_factor = use_multi_factor
 
-        self.composite_selector = CompositeSelector()
+        self.composite_selector = StockSelector()
         self.composite_scorer = CompositeScorer()
 
         # Multi-factor selector
         if use_multi_factor:
             self.factor_weights = get_factor_weights()
             self.factor_directions = get_factor_directions()
-            self.factor_loader = FactorLoader(
-                data_provider=DataProvider()
-            )
+            self.factor_loader = FactorLoader(data_provider=DataProvider())
             self.factor_selector = MultiFactorSelector(
                 weights=self.factor_weights,
                 directions=self.factor_directions,
-                data_provider=self.factor_loader.data_provider
+                data_provider=self.factor_loader.data_provider,
             )
 
-        self.current_stocks = []
-        self.current_positions = {}
+        self.current_strategy = 'CompositeScorer'
 
-    def select_stocks(self, date: pd.Timestamp) -> list:
-        """选取综合评分最高的N只股票"""
+    def select_stocks(self, date: pd.Timestamp, **kwargs) -> list:
+        """选取综合评分最高的 N 只股票"""
         if self.use_multi_factor:
             print(f"\n使用多因子策略筛选股票...")
             return self._select_stocks_multi_factor(date)
@@ -55,7 +52,6 @@ class CompositeRotator:
     def _select_stocks_multi_factor(self, date: pd.Timestamp) -> list:
         """使用多因子选股"""
         try:
-            # 加载所有股票因子数据
             print(f"    [多因子] 正在加载全市场股票因子数据... date={date.strftime('%Y-%m-%d')}", flush=True)
             factors = list(self.factor_weights.keys())
             factor_data = self.factor_loader.load_all_stock_factors(date, factors)
@@ -65,13 +61,12 @@ class CompositeRotator:
                 print("警告：未获取到因子数据，切换到综合评分策略")
                 return self._select_stocks_composite(date)
 
-            # 使用多因子选择器选股
             print(f"    [多因子] 正在计算因子评分并选股...", flush=True)
             selected = self.factor_selector.select_top_stocks(
                 data=factor_data,
                 n=self.n_stocks,
-                excluded=self.current_stocks,  # 排除已有持仓
-                date=date
+                excluded=self.current_stocks,
+                date=date,
             )
             print(f"    [多因子] 选取完成，结果: {selected}", flush=True)
 
@@ -83,57 +78,10 @@ class CompositeRotator:
             return self._select_stocks_composite(date)
 
     def _select_stocks_composite(self, date: pd.Timestamp) -> list:
-        """使用综合评分选股（原有逻辑）"""
+        """使用综合评分选股（旧逻辑）"""
         selected = self.composite_selector.select_top_stocks(
             n=self.n_stocks,
-            date=date
+            date=date,
         )
-
         self.current_stocks = selected
         return selected
-
-    def rebalance(self, date: pd.Timestamp, prices: dict = None) -> dict:
-        """执行调仓"""
-        rebalance_detail = {
-            'date': date,
-            'sell_stocks': [],
-            'buy_stocks': [],
-            'strategy': 'CompositeScorer'
-        }
-
-        # 卖出不在新持仓列表中的股票
-        for code in list(self.current_positions.keys()):
-            if code not in self.current_stocks:
-                rebalance_detail['sell_stocks'].append(code)
-                del self.current_positions[code]
-
-        # 买入新持仓股票
-        for code in self.current_stocks:
-            if code not in self.current_positions:
-                rebalance_detail['buy_stocks'].append(code)
-                # 计算实际持仓份额
-                if prices and code in prices and prices[code] > 0:
-                    shares = int(self.per_stock_capital / prices[code])
-                else:
-                    shares = 0
-                self.current_positions[code] = {
-                    'shares': shares,
-                    'buy_price': prices.get(code, 0) if prices else 0
-                }
-
-        return rebalance_detail
-
-    def run_weekly(self, date: pd.Timestamp, prices: dict = None) -> dict:
-        """执行每周流程"""
-        # 筛选股票
-        self.select_stocks(date)
-
-        # 执行调仓
-        rebalance = self.rebalance(date, prices)
-
-        return {
-            'date': date,
-            'strategy': 'CompositeScorer',
-            'stocks': self.current_stocks,
-            'rebalance': rebalance
-        }

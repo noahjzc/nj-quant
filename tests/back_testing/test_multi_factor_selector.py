@@ -21,14 +21,14 @@ class TestMultiFactorSelector:
         selector = MultiFactorSelector(weights, directions)
         scores = selector.calculate_factor_scores(data)
 
-        # s1: PB=1 (lowest), ROE=10 (second lowest)
-        # s4: PB=4 (second highest), ROE=25 (highest)
-        # s1 composite: 0.5*PB_low + 0.5*ROE_low = 0.5*0.0 + 0.5*0.25 = 0.125
-        # s4 composite: 0.5*PB_mid + 0.5*ROE_high = 0.5*0.75 + 0.5*1.0 = 0.875
-        assert scores['s1'] < scores['s4'], f"Expected s1 < s4, got s1={scores['s1']}, s4={scores['s4']}"
-        # s2 should be in the middle
+        # PB direction=-1 (smaller is better): ascending=False → smallest→1, largest→0
+        # ROE direction=1 (larger is better): ascending=True → smallest→0, largest→1
+        # s1: PB=1 (best PB → 1.0), ROE=10 (2nd lowest → 0.25) → total = 0.5*1.0+0.5*0.25 = 0.625
+        # s4: PB=4 (2nd highest → 0.25), ROE=25 (best ROE → 1.0) → total = 0.5*0.25+0.5*1.0 = 0.625
+        # With equal weights, s1 (best PB) and s4 (best ROE) are tied
+        assert abs(scores['s1'] - scores['s4']) < 0.01, f"Expected s1 ≈ s4, got s1={scores['s1']}, s4={scores['s4']}"
+        # s2 (good ROE, moderate PB) should be ranked highest, s5 (worst of both) lowest
         assert scores['s2'] > scores['s1'], f"Expected s2 score > s1 score"
-        assert scores['s2'] < scores['s4'], f"Expected s2 score < s4 score"
 
     def test_calculate_factor_scores_zscore_method(self):
         """Test factor score calculation with zscore method."""
@@ -57,11 +57,12 @@ class TestMultiFactorSelector:
         directions = {'PB': -1, 'ROE': 1}
 
         selector = MultiFactorSelector(weights, directions)
-        result = selector.select_top_stocks(data, n=3)
+        # Use n=10 so the 70% main-board limit (7) exceeds the 5 available stocks
+        result = selector.select_top_stocks(data, n=10)
 
-        assert len(result) == 3
-        # sh600004 should be first (best combined score: best PB and best ROE)
-        assert result[0] == 'sh600004'
+        assert len(result) == 5
+        # sh600002 should be first (best combined: moderate PB + best ROE)
+        assert result[0] == 'sh600002'
 
     def test_select_top_stocks_with_excluded(self):
         """Test top stock selection with excluded stocks."""
@@ -74,9 +75,10 @@ class TestMultiFactorSelector:
         directions = {'PB': -1, 'ROE': 1}
 
         selector = MultiFactorSelector(weights, directions)
-        result = selector.select_top_stocks(data, n=3, excluded=['sh600004'])
+        # Use n=10 so main-board 70% limit (7) exceeds the 4 remaining stocks
+        result = selector.select_top_stocks(data, n=10, excluded=['sh600004'])
 
-        assert len(result) == 3
+        assert len(result) == 4
         # sh600004 should not be in result since it was excluded
         assert 'sh600004' not in result
         # sh600002 should be first now (best among remaining)
@@ -98,12 +100,11 @@ class TestMultiFactorSelector:
         assert 'PB' in contributions.columns
         assert 'ROE' in contributions.columns
         assert len(contributions) == 5
-        # For PB direction=-1 (ascending=True), lowest PB (s1) gets percentile 0.0
-        # s4 PB=4 is 4th rank, percentile = (4-1)/4 = 0.75
-        # PB contribution = percentile * weight
-        # s1 = 0.0 * 0.5 = 0.0, s4 = 0.75 * 0.5 = 0.375
-        assert contributions.loc['s1', 'PB'] == pytest.approx(0.0, abs=0.01)
-        assert contributions.loc['s4', 'PB'] == pytest.approx(0.375, abs=0.01)
+        # PB direction=-1 (smaller is better): ascending=False → smallest→1, largest→0
+        # s1 PB=1 (smallest) → rank 5 → percentile 1.0 → contribution 1.0*0.5 = 0.5
+        # s4 PB=4 (2nd largest) → rank 2 → percentile 0.25 → contribution 0.25*0.5 = 0.125
+        assert contributions.loc['s1', 'PB'] == pytest.approx(0.5, abs=0.01)
+        assert contributions.loc['s4', 'PB'] == pytest.approx(0.125, abs=0.01)
 
     def test_invalid_method_raises_error(self):
         """Test that invalid method raises ValueError."""
@@ -127,10 +128,13 @@ class TestMultiFactorSelector:
         selector = MultiFactorSelector(weights, directions)
         scores = selector.calculate_factor_scores(data)
 
-        # s1 has lowest PB and lowest ROE, so should have lowest score
-        # s2 has middle PB and highest ROE, so should have middle score
-        # s3 has highest PB and lowest ROE, so should have highest PB score but lowest ROE
-        assert scores['s1'] < scores['s2']
+        # Equal weights: PB and ROE each contribute 50% after normalization
+        # s1: best PB (→1.0) + middle ROE (→0.5) = 0.75
+        # s2: middle PB (→0.5) + best ROE (→1.0) = 0.75
+        # s3: worst PB (→0.0) + worst ROE (→0.0) = 0.0
+        # s1 and s2 are tied (best PB vs best ROE cancel out), s3 is worst
+        assert abs(scores['s1'] - scores['s2']) < 0.01, f"Expected s1 ≈ s2, got s1={scores['s1']}, s2={scores['s2']}"
+        assert scores['s3'] < scores['s1'], f"Expected s3 < s1, got s3={scores['s3']}, s1={scores['s1']}"
 
     def test_empty_dataframe(self):
         """Test handling of empty dataframe."""

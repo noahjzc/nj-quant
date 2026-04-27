@@ -62,7 +62,10 @@
       "Bash(curl -x http://127.0.0.1:10809 -I https://www.google.com --connect-timeout 5)",
       "mcp__firecrawl__firecrawl_search",
       "mcp__firecrawl__firecrawl_scrape",
-      "mcp__firecrawl__firecrawl_browser_create"
+      "mcp__firecrawl__firecrawl_browser_create",
+      "Read(//d/D/workspace/code/mine/quant/**)",
+      "Bash(python -u back_testing/optimization/run_optimization.py)",
+      "Bash(PYTHONPATH=. python back_testing/backtest/run_daily_rotation.py --start 2024-01-01 --end 2024-03-31)"
     ],
     "defaultMode": "auto"
   }

@@ -71,12 +71,15 @@ class DailyRotationEngine:
     PRELOAD_DAYS = 30
     MIN_TRADING_DAYS = 20
 
-    def __init__(self, config: RotationConfig, start_date: str, end_date: str):
+    def __init__(self, config: RotationConfig, start_date: str, end_date: str,
+                 data_provider=None, preloaded_cache=None):
+        """preloaded_cache: Dict[str, DataFrame] 或 master DataFrame，均可"""
         self.config = config
         self.start_date = start_date
         self.end_date = end_date
 
-        self.data_provider = DataProvider()
+        self.data_provider = data_provider or DataProvider()
+        self._preloaded_cache = preloaded_cache
         self.position_manager = RotationPositionManager(
             total_capital=config.initial_capital,
             max_total_pct=config.max_total_pct,
@@ -93,6 +96,8 @@ class DailyRotationEngine:
         self.trailing_start = config.trailing_start
         self.ranker = SignalRanker(config.rank_factor_weights, config.rank_factor_directions)
         self.market_regime = MarketRegime(config.market_regime, self.data_provider)
+        # CachedProvider 有 get_daily_dataframe 优化路径
+        self._has_fast_daily = hasattr(self.data_provider, 'get_daily_dataframe')
 
         # 缓存全市场股票列表（避免每日重复查询）
         self._all_codes = self.data_provider.get_all_stock_codes()
@@ -102,31 +107,44 @@ class DailyRotationEngine:
         self.positions: Dict[str, Position] = {}  # stock_code -> Position
         self.daily_results: List[DailyResult] = []
         self.trade_history: List[TradeRecord] = []
-        self._stock_cache: Dict[str, pd.DataFrame] = {}  # code -> 滚动20日缓存
+        self._cache_df: pd.DataFrame = pd.DataFrame()  # master DataFrame: trade_date 索引, stock_code 列
 
     def run(self) -> List[DailyResult]:
         """运行回测"""
         dates = self._get_trading_dates()
-        print(f"[DailyRotation] 回测区间: {self.start_date} ~ {self.end_date}, 共 {len(dates)} 个交易日")
+        n_dates = len(dates)
+        if n_dates < 2:
+            return []
 
         # 一次性加载全市场历史数据（避免每日N+1查询）
-        print("[DailyRotation] 预加载全量历史数据...")
-        self._preload_histories(dates[0])
-        print(f"[DailyRotation] 预加载完成，{len(self._stock_cache)} 只股票已缓存")
+        if self._preloaded_cache is not None:
+            if isinstance(self._preloaded_cache, pd.DataFrame):
+                self._cache_df = self._preloaded_cache
+            else:
+                # dict 格式 → master DataFrame
+                frames = [df for df in self._preloaded_cache.values() if not df.empty]
+                self._cache_df = pd.concat(frames) if frames else pd.DataFrame()
+            self._preloaded_cache = None  # 释放引用
+        else:
+            self._preload_histories(dates[0])
+
+        now = datetime.now
+        n_codes = self._cache_df['stock_code'].nunique() if not self._cache_df.empty else 0
+        print(f"{now():%H:%M:%S} [DailyRotation] {self.start_date} ~ {self.end_date}, {n_dates}天, {n_codes}只")
 
         for i, date in enumerate(dates):
             date_str = date.strftime('%Y-%m-%d')
-            if (i + 1) % 20 == 0:
+            if i == 0 or (i + 1) % 10 == 0:
                 prev_asset = self.daily_results[-1].total_asset if self.daily_results else self.config.initial_capital
-                print(f"  [{i+1}/{len(dates)}] {date_str} | 持仓:{len(self.positions)} | 资产:{prev_asset:,.0f}")
+                print(f"{now():%H:%M:%S}   [{i+1}/{n_dates}] {date_str} | 持仓:{len(self.positions)} | 资产:{prev_asset:,.0f}")
 
-            # 推进到当日：加载当日数据到滚动缓存
+            # 推进到当日：追加当日全市场数据到 master DataFrame（1 次 concat）
             self._advance_to_date(date)
             result = self._run_single_day(date)
             self.daily_results.append(result)
 
         final_asset = self.daily_results[-1].total_asset if self.daily_results else self.current_capital
-        print(f"[DailyRotation] 回测完成，最终资产: {final_asset:,.0f}")
+        print(f"{datetime.now():%H:%M:%S} [DailyRotation] 回测完成，最终资产: {final_asset:,.0f}")
         return self.daily_results
 
     def _log_daily_summary(
@@ -235,10 +253,11 @@ class DailyRotationEngine:
 
         for stock_code, position in list(self.positions.items()):
             if stock_code not in stock_data:
-                # 停牌股：无法获取当日价格，用缓存中最后一日收盘价平仓
-                if stock_code in self._stock_cache and not self._stock_cache[stock_code].empty:
-                    df_cached = self._stock_cache[stock_code]
-                    price = df_cached['close'].iloc[-1]
+                # 停牌股：无法获取当日价格，从 master 缓存中取最后一日收盘价平仓
+                if stock_code in self._cache_df['stock_code'].values:
+                    df_cached = self._cache_df[self._cache_df['stock_code'] == stock_code].sort_index()
+                    if not df_cached.empty:
+                        price = df_cached['close'].iloc[-1]
                     if price > 0:
                         shares, cost = self.trade_executor.execute_sell(stock_code, price, position.shares)
                         if shares > 0:
@@ -338,19 +357,111 @@ class DailyRotationEngine:
         return sell_trades
 
     def _scan_buy_candidates(self, stock_data: Dict[str, pd.DataFrame], exclude_codes: List[str] = None) -> List[str]:
-        """扫描全市场，返回有买入信号的股票代码"""
+        """扫描全市场，返回有买入信号的股票代码（向量化）"""
         exclude_set = set(exclude_codes) if exclude_codes else set()
-        candidates = []
-        for stock_code, df in stock_data.items():
-            if stock_code in self.positions:
-                continue
-            if stock_code in exclude_set:
-                continue
-            if df.empty or len(df) < 2:
-                continue
-            if self.buy_filter.filter_buy(df, stock_code):
-                candidates.append(stock_code)
-        return candidates
+        codes = [c for c in stock_data if c not in self.positions and c not in exclude_set]
+        if not codes:
+            return []
+
+        # 构建特征矩阵（每行一只股票，列为信号检测所需指标）
+        try:
+            features = self._build_signal_features(codes)
+        except Exception:
+            # 回退到逐股检测
+            candidates = []
+            for stock_code in codes:
+                df = stock_data[stock_code]
+                if df.empty or len(df) < 2:
+                    continue
+                if self.buy_filter.filter_buy(df, stock_code):
+                    candidates.append(stock_code)
+            return candidates
+
+        if features.empty:
+            return []
+
+        # 向量化信号检测
+        active_signals = set(self.config.buy_signal_types)
+        mode = self.config.buy_signal_mode
+        masks = {}
+        f = features
+
+        if 'KDJ_GOLD' in active_signals:
+            masks['KDJ_GOLD'] = (f['kdj_k'] > f['kdj_d']) & (f['kdj_k_p'] <= f['kdj_d_p'])
+        if 'MACD_GOLD' in active_signals:
+            masks['MACD_GOLD'] = (f['macd_dif'] > f['macd_dea']) & (f['macd_dif_p'] <= f['macd_dea_p'])
+        if 'MA_GOLD' in active_signals:
+            masks['MA_GOLD'] = (f['ma_5'] > f['ma_20']) & (f['ma_5_p'] <= f['ma_20_p'])
+        if 'VOL_GOLD' in active_signals:
+            masks['VOL_GOLD'] = (f['vol_ma5'] > f['vol_ma20']) & (f['vol_ma5_p'] <= f['vol_ma20_p'])
+        if 'BOLL_BREAK' in active_signals:
+            boll_upper = f['boll_mid'] + 2 * f['close_std_20']
+            masks['BOLL_BREAK'] = f['close'] > boll_upper
+        if 'HIGH_BREAK' in active_signals:
+            masks['HIGH_BREAK'] = f['close'] >= f['high_20_max']
+
+        if not masks:
+            return []
+
+        if mode == 'OR':
+            combined = pd.Series(False, index=f.index)
+            for m in masks.values():
+                combined = combined | m.fillna(False)
+        else:
+            combined = pd.Series(True, index=f.index)
+            for m in masks.values():
+                combined = combined & m.fillna(False)
+
+        return combined[combined].index.tolist()
+
+    def _build_signal_features(self, stock_codes: List[str]) -> pd.DataFrame:
+        """从 master 缓存构建信号特征矩阵（只取每只股票最近 21 行，避免对全量历史做 transform）"""
+        mask = self._cache_df['stock_code'].isin(stock_codes)
+        hist = self._cache_df[mask]
+
+        if hist.empty:
+            return pd.DataFrame()
+
+        # 按 (stock_code, trade_date) 排序
+        hist = hist.sort_values(['stock_code', self._cache_df.index.name])
+
+        # 每只股票只保留最近 21 行（20 日窗口 + 1 行 prev），大幅压缩 transform 数据量
+        hist = hist.groupby('stock_code', sort=False).tail(21)
+
+        # 在压缩后的副本上一次性计算所有滚动列
+        hist = hist.copy()
+        g = hist.groupby('stock_code', sort=False)
+        hist['vol_ma5'] = g['volume'].rolling(5, min_periods=1).mean().values
+        hist['vol_ma20'] = g['volume'].rolling(20, min_periods=5).mean().values
+        hist['close_std_20'] = g['close'].rolling(20, min_periods=5).std().values
+        hist['high_20_max'] = g['high'].shift(1).rolling(20, min_periods=1).max().values
+
+        # 提取每只股票的最新和上一行
+        g2 = hist.groupby('stock_code', sort=False)
+        latest = g2.last().copy()           # index = stock_code
+        prev = g2.nth(-2).copy()            # index = trade_date (original), 需对齐
+        prev.index = prev['stock_code']     # 对齐到 stock_code（每组唯一）
+
+        # 填充缺失值（新股可能 history 不足）
+        cols = ['vol_ma5', 'vol_ma20', 'close_std_20', 'high_20_max']
+        for c in cols:
+            if c in latest.columns:
+                latest[c] = latest[c].fillna(0)
+            if c in prev.columns:
+                prev[c] = prev[c].fillna(0)
+
+        return pd.DataFrame({
+            'kdj_k': latest['kdj_k'], 'kdj_d': latest['kdj_d'],
+            'kdj_k_p': prev['kdj_k'], 'kdj_d_p': prev['kdj_d'],
+            'macd_dif': latest['macd_dif'], 'macd_dea': latest['macd_dea'],
+            'macd_dif_p': prev['macd_dif'], 'macd_dea_p': prev['macd_dea'],
+            'ma_5': latest['ma_5'], 'ma_20': latest['ma_20'],
+            'ma_5_p': prev['ma_5'], 'ma_20_p': prev['ma_20'],
+            'vol_ma5': latest['vol_ma5'], 'vol_ma20': latest['vol_ma20'],
+            'vol_ma5_p': prev['vol_ma5'], 'vol_ma20_p': prev['vol_ma20'],
+            'close': latest['close'], 'close_std_20': latest['close_std_20'],
+            'boll_mid': latest['boll_mid'], 'high_20_max': latest['high_20_max'],
+        }, index=latest.index)
 
     def _execute_buy(
         self,
@@ -497,7 +608,7 @@ class DailyRotationEngine:
         return [pd.Timestamp(d) for d in dates]
 
     def _preload_histories(self, first_date: pd.Timestamp):
-        """预加载初始窗口：回测首日前30个日历日的数据"""
+        """预加载初始窗口：回测首日前30个日历日的数据 → master DataFrame"""
         if not self._all_codes:
             return
 
@@ -508,58 +619,81 @@ class DailyRotationEngine:
             self._all_codes, end_date=end, start_date=start
         )
 
-        self._stock_cache: Dict[str, pd.DataFrame] = {}
-        for code, df in histories.items():
-            if not df.empty:
-                self._stock_cache[code] = df.copy()
+        frames = [df for df in histories.values() if not df.empty]
+        self._cache_df = pd.concat(frames) if frames else pd.DataFrame()
 
     def _advance_to_date(self, date: pd.Timestamp):
-        """推进到指定日期：加载当日数据，追加到滚动缓存"""
+        """推进到指定日期：读取当日 Parquet，一次 concat 追加到 master DataFrame"""
         date_str = date.strftime('%Y-%m-%d')
 
-        day_data = self.data_provider.get_stocks_for_date(self._all_codes, date_str)
-        if not day_data:
-            return
+        if self._has_fast_daily:
+            day_df = self.data_provider.get_daily_dataframe(date_str)
+            if day_df is None or day_df.empty:
+                return
 
-        # 检测停牌：当日无交易的股票清空缓存（退市同理）
-        # 但保留仍持仓的股票缓存，以便 _check_and_sell 能强制卖出停牌股
-        trading_codes = set(day_data.keys())
-        for code in list(self._stock_cache.keys()):
-            if code not in trading_codes and code not in self.positions:
-                del self._stock_cache[code]
+            day_df = day_df.copy()
+            day_df['trade_date'] = pd.Timestamp(date_str)
+            day_df = day_df.set_index('trade_date')
 
-        # 按股票代码分组，一次性 concat
-        from collections import defaultdict
-        rows_by_code: Dict[str, list] = defaultdict(list)
-        for stock_code, row_data in day_data.items():
-            new_row = pd.DataFrame([row_data]).set_index('trade_date')
-            rows_by_code[stock_code].append(new_row)
+            # 清理停牌/退市股票（不在当日交易且无持仓的股票从缓存中移除）
+            trading_codes = set(day_df['stock_code'].unique())
+            if not self._cache_df.empty:
+                positions_set = {p.stock_code for p in self.positions.values()}
+                cached_codes = set(self._cache_df['stock_code'].unique())
+                stale = cached_codes - trading_codes - positions_set
+                if stale:
+                    self._cache_df = self._cache_df[~self._cache_df['stock_code'].isin(stale)]
 
-        for stock_code, new_rows in rows_by_code.items():
-            if stock_code in self._stock_cache:
-                cache = self._stock_cache[stock_code]
-                combined = pd.concat(new_rows, sort=False)
-                if not combined.empty:
-                    combined = combined[~combined.index.isin(cache.index)]
-                    if not combined.empty:
-                        combined = combined.dropna(axis=1, how='all')
-                        if not combined.empty:
-                            cache = pd.concat([cache, combined], sort=False)
-                self._stock_cache[stock_code] = cache
+            # 一次 concat 追加所有股票（替代 4761 次 per-stock concat）
+            if self._cache_df.empty:
+                self._cache_df = day_df
             else:
-                combined = pd.concat(new_rows, sort=False)
-                self._stock_cache[stock_code] = combined.dropna(axis=1, how='all') if not combined.empty else combined
+                self._cache_df = pd.concat([self._cache_df, day_df], sort=False)
+        else:
+            # 原始路径：DataProvider 返回 dict → 转为 DataFrame 后一次 concat
+            day_data = self.data_provider.get_stocks_for_date(self._all_codes, date_str)
+            if not day_data:
+                return
+
+            from collections import defaultdict
+            rows: list = []
+            for stock_code, row_data in day_data.items():
+                row_data['trade_date'] = pd.Timestamp(date_str)
+                row_data['stock_code'] = stock_code
+                rows.append(row_data)
+
+            if not rows:
+                return
+
+            day_df = pd.DataFrame(rows).set_index('trade_date')
+
+            trading_codes = set(day_data.keys())
+            if not self._cache_df.empty:
+                positions_set = {p.stock_code for p in self.positions.values()}
+                cached_codes = set(self._cache_df['stock_code'].unique())
+                stale = cached_codes - trading_codes - positions_set
+                if stale:
+                    self._cache_df = self._cache_df[~self._cache_df['stock_code'].isin(stale)]
+
+            if self._cache_df.empty:
+                self._cache_df = day_df
+            else:
+                self._cache_df = pd.concat([self._cache_df, day_df], sort=False)
 
     def _get_daily_stock_data(self, date: pd.Timestamp) -> Dict[str, pd.DataFrame]:
-        """获取当日全市场日线数据（仅返回缓存中≥20个交易日的成熟股）"""
+        """从 master DataFrame 中提取当日活跃股票的滚动数据（≥20 个交易日）"""
+        if self._cache_df.empty:
+            return {}
+
+        # 裁剪到当前日期
+        window = self._cache_df[self._cache_df.index <= date]
+        if window.empty:
+            return {}
+
         result = {}
-        for code, df in self._stock_cache.items():
-            if df.empty:
-                continue
-            if len(df) < self.MIN_TRADING_DAYS:
-                continue
-            if date in df.index:
-                result[code] = df
+        for code, group in window.groupby('stock_code', sort=False):
+            if len(group) >= self.MIN_TRADING_DAYS and date in group.index:
+                result[code] = group
         return result
 
     def _filter_stock_pool(self, stock_data: Dict[str, pd.DataFrame]) -> Dict[str, pd.DataFrame]:

@@ -58,7 +58,9 @@ class FactorLoader:
         factors: List[str]
     ) -> pd.DataFrame:
         """
-        加载指定股票的因子数据
+        加载指定股票的因子数据（批量优化版）
+
+        用一条SQL批量查询所有股票，避免N+1问题。
 
         Args:
             stock_codes: 股票代码列表
@@ -68,40 +70,41 @@ class FactorLoader:
         Returns:
             DataFrame: index为股票代码，columns为因子值
         """
+        # 批量查询所有股票的最新数据（180天回看）
+        date_str = date.strftime('%Y-%m-%d')
+        batch_data = self.data_provider.get_batch_latest(stock_codes, date_str, lookback_days=180)
+        if not batch_data:
+            return pd.DataFrame()
+
+        # 哪些因子需要计算
+        need_return = any(f in ('RET_20', 'RET_60') for f in factors)
+
         result_data = {}
-
-        total = len(stock_codes)
-        for idx, code in enumerate(stock_codes):
+        total = len(batch_data)
+        for idx, (code, row) in enumerate(batch_data.items()):
             try:
-                df = self.data_provider.get_stock_data(code, date=date)
-                if len(df) == 0:
-                    continue
-
-                latest = df.iloc[-1]
-
                 # 提取各因子值
-                row = {}
+                out_row = {}
                 for factor in factors:
                     col_name = self.FACTOR_COLUMNS.get(factor, factor)
-                    # 需要计算的因子
                     if factor in ('RET_20', 'RET_60'):
+                        # 单独计算收益率（需要区间数据）
                         period = 20 if factor == 'RET_20' else 60
-                        row[factor] = self._calculate_return(code, date, period)
+                        out_row[factor] = self._calculate_return(code, date, period)
                     elif factor == 'LN_MCAP':
-                        row[factor] = self._calculate_ln_mcap(latest)
-                    elif col_name in df.columns:
-                        row[factor] = latest[col_name]
+                        out_row[factor] = self._calculate_ln_mcap(row)
+                    elif col_name in row:
+                        out_row[factor] = row[col_name]
                     else:
-                        row[factor] = None
+                        out_row[factor] = None
 
-                result_data[code] = row
+                result_data[code] = out_row
 
-                # 每500只打印一次进度
-                if (idx + 1) % 500 == 0:
-                    print(f"    [因子加载] 已处理 {idx + 1}/{total} 只股票...", flush=True)
+                if (idx + 1) % 1000 == 0:
+                    print(f"    [因子提取] 已处理 {idx + 1}/{total} 只股票...", flush=True)
 
             except Exception as e:
-                logger.warning(f"Failed to load factors for {code}: {e}")
+                logger.warning(f"Failed to extract factors for {code}: {e}")
                 continue
 
         result = pd.DataFrame(result_data).T
@@ -109,10 +112,8 @@ class FactorLoader:
         # 填充缺失值
         for col in result.columns:
             if result[col].isna().any():
-                # 先转换为数值类型（避免 object dtype 的 FutureWarning）
                 numeric_col = pd.to_numeric(result[col], errors='coerce')
                 median_val = numeric_col.median()
-                # 只有当中位数不是 NaN 时才填充（全空数据时跳过）
                 if pd.notna(median_val):
                     result[col] = result[col].fillna(median_val)
 
@@ -124,14 +125,14 @@ class FactorLoader:
         factors: List[str]
     ) -> pd.DataFrame:
         """
-        加载所有股票的因子数据
+        加载所有股票的因子数据（批量优化）
 
         Returns:
             DataFrame: 所有股票的因子数据
         """
         print(f"    [因子加载] 获取全市场股票列表...", flush=True)
         all_codes = self.data_provider.get_all_stock_codes()
-        print(f"    [因子加载] 股票列表共 {len(all_codes)} 只，正在逐只加载因子...", flush=True)
+        print(f"    [因子加载] 股票列表共 {len(all_codes)} 只，批量加载中...", flush=True)
         result = self.load_stock_factors(all_codes, date, factors)
         print(f"    [因子加载] 完成，成功加载 {len(result)} 只股票的因子数据", flush=True)
         return result
@@ -157,15 +158,9 @@ class FactorLoader:
                 df = self.data_provider.get_stock_data(code, date=date)
                 if len(df) == 0:
                     continue
-                # 成交额列：尝试多种可能的列名
-                turnover_col = None
-                for col in df.columns:
-                    col_upper = col.upper() if isinstance(col, str) else ''
-                    if 'TURNOVER' in col_upper or '成交额' in col:
-                        turnover_col = col
-                        break
-                if turnover_col and turnover_col in df.columns:
-                    result[code] = df[turnover_col].iloc[-1]
+                # 成交额列名固定为 turnover_amount
+                if 'turnover_amount' in df.columns:
+                    result[code] = df['turnover_amount'].iloc[-1]
             except Exception:
                 continue
         return pd.Series(result)

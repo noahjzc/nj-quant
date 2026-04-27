@@ -21,7 +21,8 @@ class PositionManager:
 
     def calculate_buy_shares(self, stock_code: str, current_price: float,
                             existing_positions: Dict[str, int],
-                            prices: Optional[Dict[str, float]] = None) -> int:
+                            prices: Optional[Dict[str, float]] = None,
+                            total_capital: Optional[float] = None) -> int:
         """
         计算买入股数
 
@@ -30,6 +31,8 @@ class PositionManager:
             current_price: 当前价格
             existing_positions: 已持仓字典 {stock_code: shares}
             prices: 当前持仓的市值单价字典 {stock_code: price}，用于计算已用资金
+            total_capital: 当前总资产（现金+持仓市值）。传入时覆盖 self.total_capital，
+                          用于支持资金随盈亏变化。
 
         Returns:
             int: 买入股数（整手，100的倍数）
@@ -37,17 +40,20 @@ class PositionManager:
         if current_price <= 0:
             return 0
 
-        if not self.can_buy(stock_code, current_price, existing_positions, prices):
+        # 使用传入的 total_capital（动态），否则回退到初始化时的固定值
+        capital = total_capital if total_capital is not None else self.total_capital
+
+        if not self.can_buy(stock_code, current_price, existing_positions, prices, capital):
             return 0
 
         # 已用资金
         used_capital = self._calculate_used_capital(existing_positions, prices)
 
         # 可用资金 = min(总资金 × 90% - 已用资金, 总资金 × 20%)
-        max_total_position = self.total_capital * self.max_total_pct
+        max_total_position = capital * self.max_total_pct
         available_by_total = max_total_position - used_capital
 
-        max_single_position = self.total_capital * self.max_position_pct
+        max_single_position = capital * self.max_position_pct
 
         available_capital = min(available_by_total, max_single_position)
 
@@ -61,7 +67,8 @@ class PositionManager:
 
     def can_buy(self, stock_code: str, current_price: float,
                 existing_positions: Dict[str, int],
-                prices: Optional[Dict[str, float]] = None) -> bool:
+                prices: Optional[Dict[str, float]] = None,
+                total_capital: Optional[float] = None) -> bool:
         """
         检查是否可以买入
 
@@ -70,6 +77,7 @@ class PositionManager:
             current_price: 当前价格
             existing_positions: 已持仓字典 {stock_code: shares}
             prices: 当前持仓的市值单价字典 {stock_code: price}，用于计算已用资金
+            total_capital: 当前总资产，传入时覆盖 self.total_capital
 
         Returns:
             bool: 是否可以买入
@@ -77,16 +85,18 @@ class PositionManager:
         if current_price <= 0:
             return False
 
+        capital = total_capital if total_capital is not None else self.total_capital
+
         # 已用资金
         used_capital = self._calculate_used_capital(existing_positions, prices)
 
         # 检查总仓位是否已达到上限
-        max_total_position = self.total_capital * self.max_total_pct
+        max_total_position = capital * self.max_total_pct
         if used_capital >= max_total_position:
             return False
 
         # 检查单只股票是否已达到上限
-        max_single_position = self.total_capital * self.max_position_pct
+        max_single_position = capital * self.max_position_pct
 
         # 该股票已用资金
         existing_shares = existing_positions.get(stock_code, 0)

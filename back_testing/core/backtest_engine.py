@@ -60,23 +60,29 @@ class BacktestEngine:
         if not self.benchmark_index:
             return 0
 
-        # 尝试加载指数数据
-        index_path = f"{self.data_path}\\index\\{self.benchmark_index}.csv"
+        if self.data is None or len(self.data) < 2:
+            return 0
+
         try:
-            index_df = pd.read_csv(index_path)
-            index_df['date'] = pd.to_datetime(index_df['date'])
-            index_df = index_df.sort_values('date').reset_index(drop=True)
+            start_date = self.data.index[0].strftime('%Y-%m-%d')
+            end_date = self.data.index[-1].strftime('%Y-%m-%d')
 
-            # 获取回测区间的指数数据
-            start_date = self.data.iloc[0]['trade_date']
-            end_date = self.data.iloc[-1]['trade_date']
+            index_df = self.data_provider.get_index_data(
+                self.benchmark_index,
+                start_date=start_date,
+                end_date=end_date
+            )
 
-            index_df = index_df[(index_df['date'] >= start_date) & (index_df['date'] <= end_date)]
+            if index_df is None or len(index_df) < 2:
+                return 0
 
-            if len(index_df) >= 2:
-                start_price = index_df.iloc[0]['close']
-                end_price = index_df.iloc[-1]['close']
+            index_df = index_df.sort_index()
+            start_price = index_df['close'].iloc[0]
+            end_price = index_df['close'].iloc[-1]
+
+            if start_price > 0:
                 self.benchmark_return = (end_price - start_price) / start_price
+
             return self.benchmark_return
         except Exception as e:
             print(f"  [警告] 加载基准指数失败: {e}")

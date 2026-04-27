@@ -29,7 +29,7 @@ Fitness: 适应度评估器 - 遗传算法的核心
 """
 import pandas as pd
 import numpy as np
-from typing import Dict, List
+from typing import Dict, List, Optional
 from datetime import timedelta
 from back_testing.selectors.multi_factor_selector import MultiFactorSelector
 from back_testing.factors.factor_loader import FactorLoader
@@ -54,7 +54,8 @@ class FitnessEvaluator:
     def __init__(self, max_drawdown_constraint: float = 0.25,
                  n_stocks: int = 5,
                  stop_loss_threshold: float = -0.05,
-                 benchmark_code: str = 'sh000300'):
+                 benchmark_code: str = 'sh000300',
+                 stock_codes: Optional[List[str]] = None):
         """
         初始化评估器
 
@@ -66,22 +67,49 @@ class FitnessEvaluator:
             stop_loss_threshold: 止损阈值，默认-5%
                                持仓期间任意股票亏损超过此阈值则该期收益记负
             benchmark_code: 基准指数代码，默认沪深300 (sh000300)
+            stock_codes: 股票池（None=全市场）
         """
         self.max_drawdown_constraint = max_drawdown_constraint
         self.n_stocks = n_stocks
         self.stop_loss_threshold = stop_loss_threshold
         self.benchmark_code = benchmark_code
+        self.stock_codes = stock_codes
 
         # 初始化数据提供者
         self.data_provider = DataProvider()
         # 初始化因子加载器
         self.factor_loader = FactorLoader(data_provider=self.data_provider)
+        # 调试计数器
+        self._debug_count = 0
         # 缓存基准指数数据
         self._benchmark_cache = {}
+        # 缓存因子数据: key=(date, factors_tuple), value=DataFrame
+        self._factor_cache = {}
+        self._cache_hits = 0
+        self._cache_misses = 0
+
+    def clear_cache(self):
+        """清除因子数据缓存（每个训练窗口开始时调用）"""
+        self._factor_cache.clear()
+        self._benchmark_cache.clear()
+        self._cache_hits = 0
+        self._cache_misses = 0
+        self._debug_count = 0
+
+    def get_cache_stats(self) -> dict:
+        """获取缓存命中率统计"""
+        total = self._cache_hits + self._cache_misses
+        hit_rate = self._cache_hits / total if total > 0 else 0
+        return {
+            'hits': self._cache_hits,
+            'misses': self._cache_misses,
+            'total': total,
+            'hit_rate': hit_rate
+        }
 
     def evaluate(self, weights: Dict[str, float],
-                start_date: pd.Timestamp,
-                end_date: pd.Timestamp) -> float:
+                 start_date: pd.Timestamp,
+                 end_date: pd.Timestamp) -> float:
         """
         评估因子权重配置
 
@@ -104,11 +132,18 @@ class FitnessEvaluator:
             portfolio_returns = result.get('weekly_returns', [])
             max_drawdown = result.get('max_drawdown', 0)
 
+            self._debug_count += 1
+
             # 约束检查: 最大回撤不能超过限制
             if max_drawdown > self.max_drawdown_constraint:
+                if self._debug_count <= 3:
+                    non_zero = sum(1 for r in portfolio_returns if r != 0)
+                    print(f"    [DEBUG] IR=0: 最大回撤{max_drawdown:.1%} > {self.max_drawdown_constraint:.0%}, 周收益非零={non_zero}/{len(portfolio_returns)}", flush=True)
                 return 0.0
 
             if len(portfolio_returns) < 4:
+                if self._debug_count <= 3:
+                    print(f"    [DEBUG] IR=0: 周收益序列太短 n={len(portfolio_returns)}", flush=True)
                 return 0.0
 
             # 获取基准收益率序列
@@ -117,20 +152,27 @@ class FitnessEvaluator:
             )
 
             if len(benchmark_returns) < 4:
+                if self._debug_count <= 3:
+                    print(f"    [DEBUG] IR=0: 基准收益率序列太短 n={len(benchmark_returns)}", flush=True)
                 return 0.0
 
             # 计算信息比率
             ir = self._calculate_information_ratio(portfolio_returns, benchmark_returns)
 
+            if self._debug_count <= 3:
+                non_zero_p = sum(1 for r in portfolio_returns if r != 0)
+                non_zero_b = sum(1 for r in benchmark_returns if r != 0)
+                print(f"    [DEBUG] IR={ir:.4f} | 周收益非零={non_zero_p}/{len(portfolio_returns)} | 基准非零={non_zero_b}/{len(benchmark_returns)} | 最大回撤={max_drawdown:.2%}", flush=True)
+
             return ir
 
         except Exception as e:
-            print(f"评估失败: {e}")
+            print(f"    [DEBUG] 评估异常: {e}")
             return 0.0
 
     def _run_backtest(self, weights: Dict[str, float],
-                     start_date: pd.Timestamp,
-                     end_date: pd.Timestamp) -> Dict:
+                      start_date: pd.Timestamp,
+                      end_date: pd.Timestamp) -> Dict:
         """
         运行简化回测
 
@@ -167,11 +209,23 @@ class FitnessEvaluator:
             current_date = rebalance_dates[i]
             next_date = rebalance_dates[i + 1]
 
-            # 获取所有股票的因子数据
+            # 获取所有股票的因子数据（带缓存）
             factor_list = list(weights.keys())
-            factor_data = self.factor_loader.load_all_stock_factors(
-                current_date, factor_list
-            )
+            cache_key = (current_date, tuple(sorted(factor_list)))
+            if cache_key not in self._factor_cache:
+                print(f"    [缓存未命中] 准备加载因子数据: {current_date}", flush=True)
+                if self.stock_codes is not None:
+                    self._factor_cache[cache_key] = self.factor_loader.load_stock_factors(
+                        self.stock_codes, current_date, factor_list
+                    )
+                else:
+                    self._factor_cache[cache_key] = self.factor_loader.load_all_stock_factors(
+                        current_date, factor_list
+                    )
+                self._cache_misses += 1
+            else:
+                self._cache_hits += 1
+            factor_data = self._factor_cache[cache_key]
 
             if len(factor_data) == 0:
                 # 无数据，组合价值不变
@@ -219,7 +273,7 @@ class FitnessEvaluator:
         }
 
     def _get_rebalance_dates(self, start_date: pd.Timestamp,
-                            end_date: pd.Timestamp) -> List[pd.Timestamp]:
+                             end_date: pd.Timestamp) -> List[pd.Timestamp]:
         """
         获取调仓日列表(每周五)
 
@@ -304,12 +358,7 @@ class FitnessEvaluator:
         if not returns:
             return 0.0
 
-        # 检查止损：任意股票亏损超过阈值则该期收益记负
-        min_return = min(returns)
-        if min_return <= self.stop_loss_threshold:
-            return min_return
-
-        # 返回等权平均收益
+        # 等权平均所有持仓股票的收益（不剔除亏损股，实盘止损逻辑应独立处理）
         return np.mean(returns)
 
     def _calculate_max_drawdown(self, portfolio_values: np.ndarray) -> float:
@@ -408,14 +457,15 @@ class FitnessEvaluator:
             rebalance_dates = self._get_rebalance_dates(start_date, end_date)
             benchmark_returns = []
 
-            for i in range(len(rebalance_dates) - 1):
-                # 找到调仓日对应的价格
-                date_before = rebalance_dates[i]
-                date_after = rebalance_dates[i + 1]
+            # 构建日期到索引的映射
+            date_indices = {pd.Timestamp(d).date(): idx for idx, d in enumerate(df.index)}
 
-                # 简化处理：使用期初和期末价格计算收益
-                idx_before = 0  # 用第一周的数据代表
-                idx_after = min(i + 1, len(prices) - 1)
+            for i in range(len(rebalance_dates) - 1):
+                date_before = rebalance_dates[i].date()
+                date_after = rebalance_dates[i + 1].date()
+
+                idx_before = date_indices.get(date_before, 0)
+                idx_after = date_indices.get(date_after, len(prices) - 1)
 
                 if idx_before < idx_after and prices[idx_before] > 0:
                     period_return = (prices[idx_after] / prices[idx_before]) - 1

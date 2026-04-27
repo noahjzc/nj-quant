@@ -457,10 +457,14 @@ def run_backtest(start_date: str, end_date: str, initial_capital: float = INITIA
 
     # 集成绩效分析
     all_trades = exit_records + rotation_sell_records
+    # 构建完整净值序列（含初始资金）
+    equity_curve = [initial_capital] + df_weeks['portfolio_value'].tolist()
     analyzer = PerformanceAnalyzer(
         trades=all_trades,
         initial_capital=initial_capital,
-        benchmark_index='sh000001'
+        benchmark_index='sh000001',
+        equity_curve=equity_curve,
+        periods_per_year=52  # 周频
     )
     metrics = analyzer.calculate_metrics()
 

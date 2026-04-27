@@ -45,26 +45,26 @@ class WalkForwardAnalyzer:
     """
 
     def __init__(self,
-                 train_window_years: int = 3,
-                 val_window_years: int = 1,
-                 test_window_years: int = 1,
+                 train_window_months: int = 36,
+                 val_window_months: int = 12,
+                 test_window_months: int = 12,
                  step_months: int = 3):
         """
         初始化Walk-Forward分析器
 
         Args:
-            train_window_years: 训练窗口长度(年)
+            train_window_months: 训练窗口长度(月)
                                足够长的训练期才能让GA找到好解
-            val_window_years: 验证窗口长度(年)
+            val_window_months: 验证窗口长度(月)
                              用于早停判断和选择最优个体
-            test_window_years: 测试窗口长度(年)
+            test_window_months: 测试窗口长度(月)
                               最终绩效评估，越长越可靠
             step_months: 滚动步进(月)
                         越小窗口越多，但每窗口数据越少
         """
-        self.train_window_years = train_window_years
-        self.val_window_years = val_window_years
-        self.test_window_years = test_window_years
+        self.train_window_months = train_window_months
+        self.val_window_months = val_window_months
+        self.test_window_months = test_window_months
         self.step_months = step_months
 
     def get_windows(self, start_date: pd.Timestamp,
@@ -92,10 +92,10 @@ class WalkForwardAnalyzer:
         windows = []
         current = pd.Timestamp(start_date)
 
-        # 转换为月数
-        train_months = self.train_window_years * 12
-        val_months = self.val_window_years * 12
-        test_months = self.test_window_years * 12
+        # 直接使用月数
+        train_months = self.train_window_months
+        val_months = self.val_window_months
+        test_months = self.test_window_months
 
         while True:
             # 计算各期结束日期

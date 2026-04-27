@@ -345,7 +345,13 @@ class SignalFilter:
         SignalType.HIGH_BREAK_DOWN: HighBreakDownSignal,
     }
 
-    def __init__(self, signal_types: List[str]):
+    def __init__(self, signal_types: List[str], mode: str = 'OR'):
+        """
+        Args:
+            signal_types: 信号类型列表
+            mode: 'OR' — 任意信号触发即通过 | 'AND' — 所有信号同时触发才通过
+        """
+        self.mode = mode
         self.detectors = []
         unknown_signals = []
         for name in signal_types:
@@ -363,16 +369,16 @@ class SignalFilter:
             logger.warning(f"SignalFilter: unknown signal types will be ignored: {unknown_signals}")
 
     def filter_buy(self, df: pd.DataFrame, stock_code: str) -> bool:
-        """检查是否有任何买入信号触发"""
-        for detector in self.detectors:
-            if detector.signal_type.is_buy:
-                result = detector.detect(df, stock_code)
-                if result.triggered:
-                    return True
-        return False
+        """检查是否有买入信号触发"""
+        buy_detectors = [d for d in self.detectors if d.signal_type.is_buy]
+        if not buy_detectors:
+            return False
+        if self.mode == 'AND':
+            return all(d.detect(df, stock_code).triggered for d in buy_detectors)
+        return any(d.detect(df, stock_code).triggered for d in buy_detectors)
 
     def filter_sell(self, df: pd.DataFrame, stock_code: str) -> bool:
-        """检查是否有任何卖出信号触发"""
+        """检查是否有卖出信号触发"""
         for detector in self.detectors:
             if detector.signal_type.is_sell:
                 result = detector.detect(df, stock_code)

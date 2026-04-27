@@ -94,7 +94,8 @@ class Chromosome:
         """
         return {f: w for f, w in zip(self.FACTOR_NAMES, self.genes)}
 
-    def _normalize(self, genes: np.ndarray) -> np.ndarray:
+    @staticmethod
+    def _normalize(genes: np.ndarray) -> np.ndarray:
         """
         归一化基因数组: 确保和为1.0且每个基因在合法范围内
 
@@ -117,14 +118,14 @@ class Chromosome:
                 genes = np.ones(len(genes)) / len(genes)
 
             # 检查是否有基因超出范围
-            if np.all((genes >= self.MIN_WEIGHT) & (genes <= self.MAX_WEIGHT)):
+            if np.all((genes >= Chromosome.MIN_WEIGHT) & (genes <= Chromosome.MAX_WEIGHT)):
                 break
 
             # 裁剪到范围内
-            genes = np.clip(genes, self.MIN_WEIGHT, self.MAX_WEIGHT)
+            genes = np.clip(genes, Chromosome.MIN_WEIGHT, Chromosome.MAX_WEIGHT)
         else:
             # 理论上不会走到这里，但以防万一
-            genes = np.clip(genes, self.MIN_WEIGHT, self.MAX_WEIGHT)
+            genes = np.clip(genes, Chromosome.MIN_WEIGHT, Chromosome.MAX_WEIGHT)
             genes = genes / genes.sum() if genes.sum() > 0 else np.ones(len(genes)) / len(genes)
 
         return genes

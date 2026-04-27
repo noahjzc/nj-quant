@@ -1,22 +1,84 @@
-# 新股过滤实现计划
+# 新股过滤 + 资金分配修复实现计划
 
 > **For agentic workers:** Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** 实现新股过滤逻辑：成熟度判断（≥20交易日）、停牌清缓存、退市清缓存、因子缺失得0分。
+**Goal:** 实现新股过滤逻辑（成熟度≥20日、停牌清缓存、退市清缓存、因子缺失得0分），并修复 `_execute_buy` 资金分配顺序 bug。
 
-**Architecture:** 在 `DailyRotationEngine` 中修改 `_preload_histories`（30日预加载窗口）、`_advance_to_date`（停牌检测）、`_get_daily_stock_data`（成熟度过滤）、`_execute_buy`（NaN→0分）四个方法。
+**Architecture:** 在 `DailyRotationEngine` 中修改 `_preload_histories`（30日预加载窗口）、`_advance_to_date`（停牌检测）、`_get_daily_stock_data`（成熟度过滤）、`_execute_buy`（NaN→0分 + 两阶段资金分配）五个方法。
 
 **Tech Stack:** Python 3.12, pandas, numpy, PostgreSQL
 
 ---
 
-## 常量定义
+## Task 0: 修复 `_execute_buy` 资金分配顺序 bug（CRITICAL）
 
-在 `DailyRotationEngine.__init__` 中新增两个类级别常量：
+**Files:**
+- Modify: `back_testing/rotation/daily_rotation_engine.py:256-344`
 
+**当前逻辑（BUG）：**
+- 按排名顺序遍历候选股，每次调用 `can_buy`（只检查仓位限制，不检查现金）后立即 `execute_buy`
+- `execute_buy` 立即扣减 `self.current_capital`
+- 导致低排名股票可能耗尽现金，使高排名股票无法买入
+
+**新逻辑（两阶段）：**
+
+阶段一：预计算每个候选股的可用性
 ```python
-PRELOAD_DAYS = 30        # 预加载日历日窗口
-MIN_TRADING_DAYS = 20    # 最小交易天数门槛（成熟股标准）
+# 阶段一：计算候选股所需资金，确定最终能买哪些
+capital_remaining = self.current_capital
+selected = []
+for stock_code in ranked:
+    price = current_prices.get(stock_code, 0.0)
+    if price <= 0:
+        continue
+    if not self.position_manager.can_buy(stock_code, price, existing_positions, current_prices):
+        continue
+
+    # 计算可买股数
+    max_shares_by_capital = int(capital_remaining / price)
+    max_shares_by_position = int(total_asset * self.position_manager.max_position_pct / price)
+    shares = min(max_shares_by_capital, max_shares_by_position)
+    if shares == 0:
+        continue
+
+    cost = shares * price * self.trade_executor.TRADING_TAX * self.trade_executor.TRADING_COMMISSION
+    capital_needed = shares * price + cost
+    if capital_needed > capital_remaining:
+        continue
+
+    selected.append((stock_code, price, shares, cost, capital_needed))
+    capital_remaining -= capital_needed
+    existing_positions[stock_code] = shares
+```
+
+阶段二：执行选中股票的买入
+```python
+# 阶段二：执行买入（从阶段一结果中扣除现金）
+for stock_code, price, shares, cost, capital_needed in selected:
+    self.current_capital -= capital_needed
+    # ... 记录 position 和 trade_history
+```
+
+**步骤：**
+
+- [ ] **Step 1: 读取代修改范围代码**
+
+Read: `back_testing/rotation/daily_rotation_engine.py:256-344`
+
+- [ ] **Step 2: 重写 `_execute_buy` 方法**
+
+用两阶段逻辑替换现有方法体（保持方法签名不变）。
+
+- [ ] **Step 3: 验证语法**
+
+Run: `python -m py_compile back_testing/rotation/daily_rotation_engine.py`
+Expected: OK
+
+- [ ] **Step 4: 提交**
+
+```bash
+git add back_testing/rotation/daily_rotation_engine.py
+git commit -m "fix(rotation): two-phase capital allocation in _execute_buy"
 ```
 
 ---
@@ -48,7 +110,7 @@ start = (first_date - pd.Timedelta(days=25)).strftime('%Y-%m-%d')
 start = (first_date - pd.Timedelta(days=self.PRELOAD_DAYS)).strftime('%Y-%m-%d')
 ```
 
-将截断逻辑删除：
+删除截断逻辑：
 ```python
 # 删除这两行：
 if len(df) > 20:
@@ -187,7 +249,7 @@ git commit -m "feat(rotation): filter stocks by MIN_TRADING_DAYS in _get_daily_s
 
 ---
 
-## Task 4: 修改 `_execute_buy` — 因子缺失得0分
+## Task 4: 修改 `_execute_buy` — 因子缺失填0分
 
 **Files:**
 - Modify: `back_testing/rotation/daily_rotation_engine.py:273-290`
@@ -211,7 +273,7 @@ if factor_row:
 
 **新逻辑：**
 - 所有配置的因子都必须进入 `factor_row`，缺失的设为 `np.nan`
-- 最终 `factor_df` 中 NaN 的处理由 `SignalRanker.rank()` 或填充逻辑处理（设为 0）
+- 最终 `factor_df` 中 NaN 的处理由 `fillna(0)` 处理
 
 修改为：
 ```python
@@ -234,6 +296,7 @@ factor_data_dict[stock_code] = factor_row
 ```python
 factor_df = pd.DataFrame(factor_data_dict).T
 factor_df = factor_df.fillna(0)
+ranked = self.ranker.rank(factor_df, top_n=x)
 ```
 
 **步骤：**
@@ -264,7 +327,7 @@ git commit -m "feat(rotation): fill missing factors with 0 in _execute_buy"
 
 ---
 
-## Task 5: 集成测试
+## Task 5: 添加类级别常量 + 集成验证
 
 **Files:**
 - Modify: `back_testing/rotation/daily_rotation_engine.py` (常量)
@@ -320,6 +383,7 @@ git commit -m "feat(rotation): add PRELOAD_DAYS and MIN_TRADING_DAYS constants"
 
 ## 自检清单
 
+- [ ] Task 0: 两阶段资金分配已修复（高排名股票优先于低排名）
 - [ ] `PRELOAD_DAYS = 30` 已添加为类级别常量
 - [ ] `MIN_TRADING_DAYS = 20` 已添加为类级别常量
 - [ ] `_preload_histories`: 加载30日窗口，不截断到20行
@@ -327,4 +391,4 @@ git commit -m "feat(rotation): add PRELOAD_DAYS and MIN_TRADING_DAYS constants"
 - [ ] `_get_daily_stock_data`: 仅返回 len(df) >= 20 的股票
 - [ ] `_execute_buy`: 因子缺失填充为 0
 - [ ] `fillna(0)` 在 `rank()` 调用之前
-- [ ] 4次 commit 完成
+- [ ] 5个 task 共6次 commit 完成（Task 0单独，Task 1-4各1次，Task 5共2次：常量+验证）

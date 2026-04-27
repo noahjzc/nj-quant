@@ -1,54 +1,82 @@
+"""统一选股器：批量评分，支持 CompositeScorer 和 SignalScorer 两种模式。
+
+用 get_batch_latest() 一次性获取所有股票的最新数据行，
+避免原来逐只查询的 N+1 问题。
+"""
+from typing import Optional, List
+
 import pandas as pd
-import numpy as np
-from back_testing.signal_scorer import SignalScorer
+
+from back_testing.composite_scorer import CompositeScorer
 from back_testing.data.data_provider import DataProvider
+from back_testing.signal_scorer import SignalScorer
+
 
 class StockSelector:
-    """选股器：根据策略信号强度从全市场筛选股票"""
+    """统一选股器
 
-    def __init__(self):
+    两种评分模式：
+    - CompositeScorer（默认）：多策略综合评分
+    - SignalScorer：按策略名称计算信号强度
+
+    Examples:
+        >>> selector = StockSelector()
+        >>> selector.select_top_stocks(n=5, date='2024-01-15')
+        >>> selector.select_top_stocks(n=5, date='2024-01-15', strategy_name='RSIReversalStrategy')
+    """
+
+    def __init__(self, scorer=None):
         self.data_provider = DataProvider()
-        self.scorer = SignalScorer()
+        self._composite_scorer = scorer if isinstance(scorer, CompositeScorer) else CompositeScorer()
+        self._signal_scorer = SignalScorer()
 
-    def get_all_stock_codes(self) -> list:
-        """获取所有股票代码"""
-        return self.data_provider.get_all_stock_codes()
+    def select_top_stocks(
+        self,
+        n: int = 5,
+        date: Optional[str] = None,
+        strategy_name: Optional[str] = None,
+    ) -> List[str]:
+        """选取评分最高的 N 只股票
 
-    def calculate_stock_signal(self, stock_code: str, strategy_name: str,
-                                date: pd.Timestamp) -> float:
-        """计算单只股票在特定日期的信号强度"""
-        try:
-            df = self.data_provider.get_stock_data(stock_code, date=date)
-            if len(df) == 0:
-                return 0
+        Args:
+            n: 选取数量
+            date: 评分日期
+            strategy_name: 策略名称（None=使用综合评分）
 
-            # 取最后一行计算信号强度
-            latest = df.iloc[-1:]
-            score = self.scorer.get_signal_strength(strategy_name, latest).iloc[0]
-            return score
-        except Exception:
-            return 0
-
-    def select_top_stocks(self, strategy_name: str, n: int = 5,
-                          date: str = None) -> list:
-        """选取信号最强的N只股票"""
+        Returns:
+            List[str]: 股票代码列表
+        """
         if date is None:
             date = pd.Timestamp.now()
         else:
             date = pd.to_datetime(date)
 
-        all_codes = self.get_all_stock_codes()
-        print(f"正在评估 {len(all_codes)} 只股票...")
+        all_codes = self.data_provider.get_all_stock_codes()
+        print(f"正在批量获取 {len(all_codes)} 只股票的数据...", flush=True)
+
+        # 一条 SQL 批量获取所有股票的最新数据行
+        batch_data = self.data_provider.get_batch_latest(all_codes, date)
 
         scores = []
         for code in all_codes:
-            score = self.calculate_stock_signal(code, strategy_name, date)
+            if code not in batch_data:
+                scores.append((code, 0.0))
+                continue
+
+            row = batch_data[code]
+            df = pd.DataFrame([row])
+
+            try:
+                if strategy_name:
+                    score = self._signal_scorer.get_signal_strength(strategy_name, df).iloc[0]
+                else:
+                    score = self._composite_scorer.calculate_composite_scores(df).iloc[0]
+            except Exception:
+                score = 0.0
+
             scores.append((code, score))
 
-        # 按分数排序
         scores.sort(key=lambda x: x[1], reverse=True)
-
-        # 返回前N只
-        selected = [code for code, score in scores[:n]]
+        selected = [code for code, _ in scores[:n]]
         print(f"选取结果: {selected}")
         return selected

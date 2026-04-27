@@ -26,7 +26,9 @@ class PerformanceAnalyzer:
         trades: List[Dict],
         initial_capital: float = 1000000.0,
         benchmark_index: str = 'sh000001',
-        risk_free_rate: float = 0.025
+        risk_free_rate: float = 0.025,
+        equity_curve: Optional[List[float]] = None,
+        periods_per_year: int = 52
     ):
         """
         Args:
@@ -38,11 +40,19 @@ class PerformanceAnalyzer:
             initial_capital: 期初资金
             benchmark_index: 基准指数代码
             risk_free_rate: 无风险利率
+            equity_curve: 组合净值序列（含起始值），用于正确计算总收益/回撤/Sharpe等。
+                          当提供时，以下指标从净值曲线推导而非从个股交易收益率复利：
+                          total_return, annual_return, max_drawdown, sharpe_ratio,
+                          sortino_ratio, calmar_ratio。
+                          win_rate 和 profit_loss_ratio 仍从个股交易计算。
+            periods_per_year: 每年期数，用于年化。周频=52，日频=252，月频=12。
         """
         self.trades = trades
         self.initial_capital = initial_capital
         self.benchmark_index = benchmark_index
         self.risk_free_rate = risk_free_rate
+        self.equity_curve = equity_curve
+        self.periods_per_year = periods_per_year
 
     def calculate_metrics(self) -> Dict:
         """计算所有绩效指标"""
@@ -50,18 +60,75 @@ class PerformanceAnalyzer:
         completed_trades = [t for t in self.trades if 'return' in t]
         returns = [t['return'] for t in completed_trades]
 
+        # Trade-level metrics (always from individual trades)
+        win_rate = self._calculate_win_rate(returns)
+        profit_loss_ratio = self._calculate_profit_loss_ratio(returns)
+
+        # Portfolio-level metrics
+        if self.equity_curve is not None and len(self.equity_curve) > 1:
+            equity = np.array(self.equity_curve)
+            period_returns = (equity[1:] - equity[:-1]) / equity[:-1]
+
+            total_return = (equity[-1] / equity[0]) - 1
+
+            n_periods = len(period_returns)
+            annual_return = (1 + total_return) ** (self.periods_per_year / n_periods) - 1
+
+            max_drawdown = self._max_drawdown_from_equity(equity)
+
+            # Sharpe
+            excess_annual = np.mean(period_returns) * self.periods_per_year - self.risk_free_rate
+            annual_vol = np.std(period_returns, ddof=1) * np.sqrt(self.periods_per_year)
+            sharpe = excess_annual / annual_vol if annual_vol > 1e-10 else 0.0
+
+            # Sortino
+            downside = period_returns[period_returns < 0]
+            if len(downside) == 0:
+                sortino = float('inf') if excess_annual > 0 else 0.0
+            elif len(downside) == 1:
+                ds_annual = abs(downside[0]) * np.sqrt(self.periods_per_year)
+                sortino = excess_annual / ds_annual if ds_annual > 1e-10 else 0.0
+            else:
+                ds_annual = np.std(downside, ddof=1) * np.sqrt(self.periods_per_year)
+                sortino = excess_annual / ds_annual if ds_annual > 1e-10 else 0.0
+
+            # Calmar
+            calmar = annual_return / max_drawdown if max_drawdown > 0 else (
+                float('inf') if annual_return > 0 else 0.0
+            )
+        else:
+            total_return = self._calculate_total_return(returns)
+            annual_return = self._calculate_annual_return(returns)
+            max_drawdown = self._calculate_max_drawdown(returns)
+            sharpe = self._calculate_sharpe_ratio(returns)
+            sortino = self._calculate_sortino_ratio(returns)
+            calmar = self._calculate_calmar_ratio(returns)
+
         metrics = {
-            'total_return': self._calculate_total_return(returns),
-            'annual_return': self._calculate_annual_return(returns),
-            'max_drawdown': self._calculate_max_drawdown(returns),
-            'sharpe_ratio': self._calculate_sharpe_ratio(returns),
-            'calmar_ratio': self._calculate_calmar_ratio(returns),
-            'sortino_ratio': self._calculate_sortino_ratio(returns),
-            'win_rate': self._calculate_win_rate(returns),
-            'profit_loss_ratio': self._calculate_profit_loss_ratio(returns),
+            'total_return': total_return,
+            'annual_return': annual_return,
+            'max_drawdown': max_drawdown,
+            'sharpe_ratio': sharpe,
+            'calmar_ratio': calmar,
+            'sortino_ratio': sortino,
+            'win_rate': win_rate,
+            'profit_loss_ratio': profit_loss_ratio,
         }
 
         return metrics
+
+    @staticmethod
+    def _max_drawdown_from_equity(equity: np.ndarray) -> float:
+        """从净值序列计算最大回撤"""
+        peak = equity[0]
+        max_dd = 0.0
+        for value in equity:
+            if value > peak:
+                peak = value
+            dd = (peak - value) / peak
+            if dd > max_dd:
+                max_dd = dd
+        return max_dd
 
     def _calculate_total_return(self, returns: List[float]) -> float:
         """计算总收益率"""

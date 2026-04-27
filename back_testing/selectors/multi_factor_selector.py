@@ -82,20 +82,15 @@ class MultiFactorSelector:
             # Get factor direction (default to 1 if not specified)
             direction = self.directions.get(factor, 1)
 
-            # For direction=-1 (smaller is better):
-            #   ascending=True so lower values get lower percentile (no flip needed)
-            # For direction=1 (larger is better):
-            #   ascending=False so lower percentile goes to higher values (flip needed)
-            ascending = direction == -1
+            # For direction=1 (larger is better): ascending=True → largest→1, smallest→0
+            # For direction=-1 (smaller is better): ascending=False → smallest→1, largest→0
+            ascending = direction == 1
 
             # Standardize factor using specified method
             if self.method == 'rank':
                 processed = self._factor_processor.rank_percentile(
                     data[factor], ascending=ascending
                 )
-                # For direction=1, flip so higher original values get higher scores
-                if direction == 1:
-                    processed = 1 - processed
             else:  # zscore
                 # Negate before z-score for direction=-1 so lower values get higher scores
                 if direction == -1:
@@ -217,20 +212,15 @@ class MultiFactorSelector:
         for factor in factor_columns:
             direction = self.directions.get(factor, 1)
 
-            # For direction=-1 (smaller is better):
-            #   ascending=True so lower values get lower percentile (no flip needed)
-            # For direction=1 (larger is better):
-            #   ascending=False so lower percentile goes to higher values (flip needed)
-            ascending = direction == -1
+            # For direction=1 (larger is better): ascending=True → largest→1, smallest→0
+            # For direction=-1 (smaller is better): ascending=False → smallest→1, largest→0
+            ascending = direction == 1
 
             # Standardize factor
             if self.method == 'rank':
                 processed = self._factor_processor.rank_percentile(
                     data[factor], ascending=ascending
                 )
-                # For direction=1, flip so higher original values get higher scores
-                if direction == 1:
-                    processed = 1 - processed
             else:
                 # For zscore with direction=-1, negate before z_score
                 if direction == -1:

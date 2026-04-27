@@ -103,7 +103,8 @@ class RiskManager:
             stock_code='POSITION',
             current_price=current_price,
             existing_positions=positions_dict,
-            prices=prices_dict
+            prices=prices_dict,
+            total_capital=total_capital
         )
 
         return shares

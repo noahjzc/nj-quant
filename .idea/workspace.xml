@@ -4,52 +4,39 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="ba9c56f9-9fae-4e2f-bc58-82725a66fec3" name="Changes" comment="init">
+    <list default="true" id="ba9c56f9-9fae-4e2f-bc58-82725a66fec3" name="Changes" comment="refactor(genetic-algorithm): 优化遗传算法因子权重优化设计文档和实现&#10;&#10;- 调整了设计文档中的表格格式，统一列宽和对齐方式&#10;- 重构适应度评估器，实现简化版回测用于GA评估&#10;- 添加了带超时和重试的baostock查询功能&#10;- 更新染色体类文档，明确因子权重约束和归一化逻辑&#10;- 修复数据列名引用，使用统一的数据列名常量&#10;- 优化回测引擎中的日期处理和数据加载逻辑&#10;- 完善复合轮动器的数据提供器集成&#10;- 更新指数数据导入计划的文件结构说明">
       <change beforePath="$PROJECT_DIR$/.claude/settings.local.json" beforeDir="false" afterPath="$PROJECT_DIR$/.claude/settings.local.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/back_testing/analysis/performance_analyzer.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/analysis/performance_analyzer.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/back_testing/backtest/run_composite_backtest.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/backtest/run_composite_backtest.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/back_testing/backtest/run_rotator_backtest.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/backtest/run_rotator_backtest.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/back_testing/composite_rotator.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/composite_rotator.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/composite_scorer.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/composite_scorer.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/back_testing/core/backtest_engine.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/core/backtest_engine.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/core/portfolio_optimizer.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/core/portfolio_optimizer.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/back_testing/data/data_provider.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/data/data_provider.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/data/db/connection.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/data/db/connection.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/data/db/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/data/db/models.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/data/sync/baostock_client.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/data/sync/baostock_client.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/data/sync/daily_update.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/data/sync/daily_update.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/data/sync/init_history.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/data/sync/init_history.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/back_testing/factors/factor_loader.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/factors/factor_loader.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/factors/factor_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/factors/factor_utils.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/chromosome.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/chromosome.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/crossover.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/crossover.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/elite.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/elite.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/fitness.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/fitness.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/mutation.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/mutation.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/niching.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/niching.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/niching.py" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/optimizer.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/optimizer.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/population.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/population.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/selection.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/selection.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/sensitivity.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/sensitivity.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/walk_forward.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/walk_forward.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/run_daily_rotation_optimization.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/run_daily_rotation_optimization.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/back_testing/optimization/run_optimization.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/run_optimization.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/portfolio_backtest.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/portfolio_backtest.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/back_testing/portfolio_rotator.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/portfolio_rotator.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/risk/position_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/risk/position_manager.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/risk/risk_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/risk/risk_manager.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/back_testing/risk/stop_loss_strategies.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/risk/stop_loss_strategies.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/rotation/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/rotation/config.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/rotation/daily_rotation_engine.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/rotation/daily_rotation_engine.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/rotation/signal_engine/signal_filter.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/rotation/signal_engine/signal_filter.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/back_testing/selectors/composite_selector.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/selectors/composite_selector.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/selectors/multi_factor_selector.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/selectors/multi_factor_selector.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/back_testing/selectors/stock_selector.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/selectors/stock_selector.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/signal_scorer.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/signal_scorer.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/strategies/combined_strategy.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/strategies/combined_strategy.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/strategies/ma_strategy.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/strategies/ma_strategy.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/strategies/macd_strategy.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/strategies/macd_strategy.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/strategies/rsi_strategy.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/strategies/rsi_strategy.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/strategy_evaluator.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/strategy_evaluator.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/data_column_names.py" beforeDir="false" afterPath="$PROJECT_DIR$/data_column_names.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/superpowers/plans/2026-04-21-genetic-algorithm-factor-optimization-plan.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/superpowers/plans/2026-04-21-genetic-algorithm-factor-optimization-plan.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/superpowers/specs/2026-04-21-genetic-algorithm-factor-optimization-design.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/superpowers/specs/2026-04-21-genetic-algorithm-factor-optimization-design.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/back_testing/optimization/test_chromosome.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/back_testing/optimization/test_chromosome.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/superpowers/plans/2026-04-25-new-stock-filter-impl-plan.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/superpowers/plans/2026-04-25-new-stock-filter-impl-plan.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/superpowers/specs/2026-04-25-daily-rotation-design.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/superpowers/specs/2026-04-25-daily-rotation-design.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/test_multi_factor_selector.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/back_testing/test_multi_factor_selector.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -66,6 +53,10 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
+  <component name="HighlightingSettingsPerFile">
+    <setting file="file://$USER_HOME$/AppData/Local/JetBrains/PyCharm2025.1/python_stubs/-2115902539/builtins.py" root0="SKIP_INSPECTION" />
+    <setting file="file://$PROJECT_DIR$/.venv/Lib/site-packages/pandas/core/frame.py" root0="SKIP_INSPECTION" />
+  </component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 3
 }</component>
@@ -74,26 +65,26 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "Python.main.executor": "Run",
-    "Python.run_backtest.executor": "Run",
-    "Python.run_composite_backtest.executor": "Run",
-    "Python.run_full_backtest.executor": "Run",
-    "Python.run_optimization.executor": "Debug",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "master",
-    "last_opened_file_path": "D:/workspace/code/mine/quant/nj-quant",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "settings.editor.selected.configurable": "Code Search",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Python.main.executor&quot;: &quot;Run&quot;,
+    &quot;Python.run_backtest.executor&quot;: &quot;Run&quot;,
+    &quot;Python.run_composite_backtest.executor&quot;: &quot;Run&quot;,
+    &quot;Python.run_full_backtest.executor&quot;: &quot;Run&quot;,
+    &quot;Python.run_optimization.executor&quot;: &quot;Debug&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
+    &quot;last_opened_file_path&quot;: &quot;D:/workspace/code/mine/quant/nj-quant&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;editor.preferences.fonts.default&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="D:\workspace\code\mine\quant\nj-quant" />
@@ -254,7 +245,9 @@
       <workItem from="1776757199024" duration="6028000" />
       <workItem from="1776782557748" duration="2538000" />
       <workItem from="1776816664072" duration="790000" />
-      <workItem from="1776822131119" duration="7625000" />
+      <workItem from="1776822131119" duration="24588000" />
+      <workItem from="1777098761029" duration="1704000" />
+      <workItem from="1777102338388" duration="17784000" />
     </task>
     <task id="LOCAL-00001" summary="init">
       <option name="closed" value="true" />
@@ -264,7 +257,15 @@
       <option name="project" value="LOCAL" />
       <updated>1745999085131</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="refactor(genetic-algorithm): 优化遗传算法因子权重优化设计文档和实现&#10;&#10;- 调整了设计文档中的表格格式，统一列宽和对齐方式&#10;- 重构适应度评估器，实现简化版回测用于GA评估&#10;- 添加了带超时和重试的baostock查询功能&#10;- 更新染色体类文档，明确因子权重约束和归一化逻辑&#10;- 修复数据列名引用，使用统一的数据列名常量&#10;- 优化回测引擎中的日期处理和数据加载逻辑&#10;- 完善复合轮动器的数据提供器集成&#10;- 更新指数数据导入计划的文件结构说明">
+      <option name="closed" value="true" />
+      <created>1776999058711</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1776999058711</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -272,7 +273,8 @@
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="init" />
-    <option name="LAST_COMMIT_MESSAGE" value="init" />
+    <MESSAGE value="refactor(genetic-algorithm): 优化遗传算法因子权重优化设计文档和实现&#10;&#10;- 调整了设计文档中的表格格式，统一列宽和对齐方式&#10;- 重构适应度评估器，实现简化版回测用于GA评估&#10;- 添加了带超时和重试的baostock查询功能&#10;- 更新染色体类文档，明确因子权重约束和归一化逻辑&#10;- 修复数据列名引用，使用统一的数据列名常量&#10;- 优化回测引擎中的日期处理和数据加载逻辑&#10;- 完善复合轮动器的数据提供器集成&#10;- 更新指数数据导入计划的文件结构说明" />
+    <option name="LAST_COMMIT_MESSAGE" value="refactor(genetic-algorithm): 优化遗传算法因子权重优化设计文档和实现&#10;&#10;- 调整了设计文档中的表格格式，统一列宽和对齐方式&#10;- 重构适应度评估器，实现简化版回测用于GA评估&#10;- 添加了带超时和重试的baostock查询功能&#10;- 更新染色体类文档，明确因子权重约束和归一化逻辑&#10;- 修复数据列名引用，使用统一的数据列名常量&#10;- 优化回测引擎中的日期处理和数据加载逻辑&#10;- 完善复合轮动器的数据提供器集成&#10;- 更新指数数据导入计划的文件结构说明" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>

@@ -65,9 +65,9 @@ def gaussian_mutation(chromosome: Chromosome,
                 Chromosome.MAX_WEIGHT
             )
 
-    # 归一化: 确保所有权重之和=1.0
-    # 这里直接除以总和，因为前面已经裁剪到正数范围
-    mutated.genes = mutated.genes / mutated.genes.sum()
+    # 归一化: 确保权重和=1.0且每个基因在合法范围内
+    # 复用 Chromosome._normalize 的迭代裁剪+重归一化逻辑
+    mutated.genes = Chromosome._normalize(mutated.genes)
 
     return mutated
 
