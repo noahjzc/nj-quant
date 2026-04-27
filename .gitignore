@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -217,7 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
-=======
+
 # created by virtualenv automatically
 .idea
 
@@ -228,4 +227,3 @@ back_testing/results/*
 # Database configuration (contains credentials)
 back_testing/config/database.ini
 cache
->>>>>>> master
