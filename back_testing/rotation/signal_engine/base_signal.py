@@ -15,6 +15,8 @@ class SignalType(Enum):
     DMI_GOLD = 'DMI_GOLD'
     BOLL_BREAK = 'BOLL_BREAK'
     HIGH_BREAK = 'HIGH_BREAK'
+    KDJ_GOLD_LOW = 'KDJ_GOLD_LOW'
+    PSY_BUY = 'PSY_BUY'
     # 卖出信号（死叉）
     KDJ_DEATH = 'KDJ_DEATH'
     MACD_DEATH = 'MACD_DEATH'
@@ -23,14 +25,19 @@ class SignalType(Enum):
     DMI_DEATH = 'DMI_DEATH'
     BOLL_BREAK_DOWN = 'BOLL_BREAK_DOWN'
     HIGH_BREAK_DOWN = 'HIGH_BREAK_DOWN'
+    PSY_SELL = 'PSY_SELL'
 
     @property
     def is_buy(self) -> bool:
-        return self.name.endswith('_GOLD') or self.name == 'BOLL_BREAK' or self.name == 'HIGH_BREAK'
+        return self.name in ('KDJ_GOLD', 'MACD_GOLD', 'MA_GOLD', 'VOL_GOLD',
+                             'DMI_GOLD', 'BOLL_BREAK', 'HIGH_BREAK',
+                             'KDJ_GOLD_LOW', 'PSY_BUY')
 
     @property
     def is_sell(self) -> bool:
-        return self.name.endswith('_DEATH') or self.name in ('BOLL_BREAK_DOWN', 'HIGH_BREAK_DOWN')
+        return self.name in ('KDJ_DEATH', 'MACD_DEATH', 'MA_DEATH', 'VOL_DEATH',
+                             'DMI_DEATH', 'BOLL_BREAK_DOWN', 'HIGH_BREAK_DOWN',
+                             'PSY_SELL')
 
 
 @dataclass
