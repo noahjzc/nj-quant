@@ -38,12 +38,13 @@ class RotationConfig:
     buy_signal_types: List[str] = field(default_factory=lambda: [
         "KDJ_GOLD",
         "MACD_GOLD",
-        "HIGH_BREAK"
+        "HIGH_BREAK",
+        "KDJ_GOLD_LOW",
     ])
     buy_signal_mode: str = 'AND'  # 'OR': 任意信号触发 | 'AND': 所有信号同时触发
     sell_signal_types: List[str] = field(default_factory=lambda: [
         'KDJ_DEATH', 'MACD_DEATH', 'MA_DEATH', 'VOL_DEATH',
-        'BOLL_BREAK_DOWN', 'HIGH_BREAK_DOWN'
+        'BOLL_BREAK_DOWN', 'HIGH_BREAK_DOWN', 'PSY_SELL'
     ])
     # 排序因子及权重
     rank_factor_weights: Dict[str, float] = field(default_factory=lambda: {
@@ -52,7 +53,10 @@ class RotationConfig:
         "VOLUME_RATIO": 0.06851020411739067,
         "PB": 0.24923532669436346,
         "PE_TTM": 0.2650605509924776,
-        "OVERHEAT": 0.0912180615138063
+        "OVERHEAT": 0.0912180615138063,
+        "circulating_mv": 0.15,
+        "WR_10": 0.10,
+        "WR_14": 0.10,
     })
     rank_factor_directions: Dict[str, int] = field(default_factory=lambda: {
         'RSI_1': 1,
@@ -61,7 +65,12 @@ class RotationConfig:
         'PB': -1,
         'PE_TTM': -1,
         'OVERHEAT': -1,
+        'circulating_mv': -1,
+        'WR_10': -1,
+        'WR_14': -1,
     })
+    # KDJ 低位金叉阈值
+    kdj_low_threshold: float = 30.0
     # 市场状态调节
     market_regime: MarketRegimeConfig = field(default_factory=MarketRegimeConfig)
     # 股票池过滤
