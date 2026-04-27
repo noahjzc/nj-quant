@@ -119,5 +119,56 @@ def test_process_factor_invalid_method():
         FactorProcessor.process_factor(data, method='invalid')
 
 
+def test_williams_r_basic():
+    """Test Williams %R calculation with known values."""
+    df = pd.DataFrame({
+        'high': [12, 13, 14, 15, 16, 15, 14, 13, 12, 11],
+        'low':  [8,  9,  10, 11, 10, 9,  8,  7,  6,  5],
+        'close': [10, 11, 12, 13, 12, 11, 10, 9, 8, 7],
+    })
+    # WR_5: period=5, last 5 rows (indices 5-9)
+    # high_n = max(15,14,13,12,11) = 15
+    # low_n = min(9,8,7,6,5) = 5
+    # close = 7
+    # WR = (15-7)/(15-5) * -100 = 8/10 * -100 = -80
+    result = FactorProcessor.williams_r(df, 5)
+    assert result == -80.0
+
+
+def test_williams_r_no_range():
+    """Test Williams %R when high == low (no price range)."""
+    df = pd.DataFrame({
+        'high': [10, 10, 10, 10, 10],
+        'low':  [10, 10, 10, 10, 10],
+        'close': [10, 10, 10, 10, 10],
+    })
+    result = FactorProcessor.williams_r(df, 5)
+    assert result == -50.0
+
+
+def test_williams_r_oversold():
+    """Test Williams %R at extreme oversold (close near low)."""
+    df = pd.DataFrame({
+        'high': [15, 15, 15, 15, 15],
+        'low':  [5, 5, 5, 5, 5],
+        'close': [6, 6, 6, 6, 6],
+    })
+    # WR = (15-6)/(15-5) * -100 = 9/10 * -100 = -90
+    result = FactorProcessor.williams_r(df, 5)
+    assert result == pytest.approx(-90.0)
+
+
+def test_williams_r_overbought():
+    """Test Williams %R at extreme overbought (close near high)."""
+    df = pd.DataFrame({
+        'high': [15, 15, 15, 15, 15],
+        'low':  [5, 5, 5, 5, 5],
+        'close': [14, 14, 14, 14, 14],
+    })
+    # WR = (15-14)/(15-5) * -100 = 1/10 * -100 = -10
+    result = FactorProcessor.williams_r(df, 5)
+    assert result == pytest.approx(-10.0)
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

@@ -55,6 +55,26 @@ class FactorProcessor:
         return (z - z_min) / (z_max - z_min)
 
     @staticmethod
+    def williams_r(df: pd.DataFrame, period: int) -> float:
+        """Williams %R: measures close relative to high-low range over N periods.
+
+        Value ranges from -100 (close at low, oversold) to 0 (close at high, overbought).
+
+        Args:
+            df: DataFrame with 'high', 'low', 'close' columns (must have >= period rows).
+            period: Lookback period.
+
+        Returns:
+            Williams %R value in [-100, 0].
+        """
+        high_n = df['high'].tail(period).max()
+        low_n = df['low'].tail(period).min()
+        close = df['close'].iloc[-1]
+        if high_n == low_n:
+            return -50.0
+        return (high_n - close) / (high_n - low_n) * -100
+
+    @staticmethod
     def winsorize(series: pd.Series, lower: float = 0.05, upper: float = 0.95) -> pd.Series:
         """Clip extreme values to percentile bounds.
 
