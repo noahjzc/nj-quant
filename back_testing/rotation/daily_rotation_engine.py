@@ -27,6 +27,7 @@ def compute_overheat(
     return (rsi_component + ret_component) / 2.0
 from back_testing.rotation.signal_engine.signal_filter import SignalFilter
 from back_testing.rotation.signal_engine.signal_ranker import SignalRanker
+from back_testing.factors.factor_utils import FactorProcessor
 from back_testing.rotation.market_regime import MarketRegime
 from back_testing.rotation.position_manager import RotationPositionManager
 from back_testing.rotation.trade_executor import TradeExecutor, TradeRecord
@@ -86,7 +87,8 @@ class DailyRotationEngine:
             max_position_pct=config.max_position_pct
         )
         self.trade_executor = TradeExecutor()
-        self.buy_filter = SignalFilter(config.buy_signal_types, mode=config.buy_signal_mode)
+        self.buy_filter = SignalFilter(config.buy_signal_types, mode=config.buy_signal_mode,
+                                        kdj_low_threshold=config.kdj_low_threshold)
         self.sell_filter = SignalFilter(config.sell_signal_types)
         # ATR 止损止盈参数
         self.atr_period = config.atr_period
@@ -399,6 +401,13 @@ class DailyRotationEngine:
             masks['BOLL_BREAK'] = f['close'] > boll_upper
         if 'HIGH_BREAK' in active_signals:
             masks['HIGH_BREAK'] = f['close'] >= f['high_20_max']
+        if 'KDJ_GOLD_LOW' in active_signals:
+            k_thresh = self.config.kdj_low_threshold
+            masks['KDJ_GOLD_LOW'] = (
+                (f['kdj_k'] > f['kdj_d']) & (f['kdj_k_p'] <= f['kdj_d_p']) & (f['kdj_k'] < k_thresh)
+            )
+        if 'PSY_BUY' in active_signals:
+            masks['PSY_BUY'] = (f['psy'] < 25) & (f['psy'] > f['psyma'])
 
         if not masks:
             return []
@@ -461,6 +470,8 @@ class DailyRotationEngine:
             'vol_ma5_p': prev['vol_ma5'], 'vol_ma20_p': prev['vol_ma20'],
             'close': latest['close'], 'close_std_20': latest['close_std_20'],
             'boll_mid': latest['boll_mid'], 'high_20_max': latest['high_20_max'],
+            'psy': latest['psy'], 'psyma': latest['psyma'],
+            'psy_p': prev['psy'], 'psyma_p': prev['psyma'],
         }, index=latest.index)
 
     def _execute_buy(
@@ -511,6 +522,12 @@ class DailyRotationEngine:
                         )
                     else:
                         factor_row[factor] = 0.0
+                elif factor == 'circulating_mv':
+                    val = row.get('circulating_mv', np.nan)
+                    factor_row[factor] = np.log(val) if val > 0 else np.nan
+                elif factor in ('WR_10', 'WR_14'):
+                    period = 10 if factor == 'WR_10' else 14
+                    factor_row[factor] = FactorProcessor.williams_r(df, period)
                 elif factor in row.index:
                     val = row[factor]
                     factor_row[factor] = val if val == val else np.nan  # NaN check
