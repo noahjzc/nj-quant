@@ -73,12 +73,13 @@ def compute_sharpe(equity: List[float], periods_per_year: int = 252) -> float:
 # ═══════════════════════════════════════════════
 
 # 可优化信号的完整列表
-ALL_SIGNAL_TYPES = ['KDJ_GOLD', 'MACD_GOLD', 'MA_GOLD', 'VOL_GOLD', 'BOLL_BREAK', 'HIGH_BREAK']
+ALL_SIGNAL_TYPES = ['KDJ_GOLD', 'MACD_GOLD', 'MA_GOLD', 'VOL_GOLD', 'BOLL_BREAK', 'HIGH_BREAK', 'KDJ_GOLD_LOW']
 
 # 固定参数（不参与优化）
 FIXED_FACTOR_DIRECTIONS = {
     'RSI_1': 1, 'RET_20': 1, 'VOLUME_RATIO': 1,
     'PB': -1, 'PE_TTM': -1, 'OVERHEAT': -1,
+    'circulating_mv': -1, 'WR_10': -1, 'WR_14': -1,
 }
 
 
@@ -128,6 +129,7 @@ def sample_config(trial: optuna.Trial, base_config: RotationConfig = None) -> Ro
     # --- 整数参数 ---
     max_positions = trial.suggest_int('max_positions', 3, 10)
     atr_period = trial.suggest_int('atr_period', 7, 21)
+    kdj_low_threshold = trial.suggest_float('kdj_low_threshold', 20.0, 40.0)
 
     return RotationConfig(
         initial_capital=base.initial_capital,
@@ -152,6 +154,7 @@ def sample_config(trial: optuna.Trial, base_config: RotationConfig = None) -> Ro
         trailing_start=trailing_start,
         overheat_rsi_threshold=overheat_rsi_threshold,
         overheat_ret5_threshold=overheat_ret5_threshold,
+        kdj_low_threshold=kdj_low_threshold,
     )
 
 
@@ -410,6 +413,7 @@ def _params_to_config(params: Dict, base_config: RotationConfig = None) -> Rotat
         trailing_start=params['trailing_start'],
         overheat_rsi_threshold=params['overheat_rsi_threshold'],
         overheat_ret5_threshold=params['overheat_ret5_threshold'],
+        kdj_low_threshold=params['kdj_low_threshold'],
     )
 
 
@@ -469,6 +473,7 @@ def _config_to_dict(config: RotationConfig) -> Dict:
         'trailing_start': config.trailing_start,
         'overheat_rsi_threshold': config.overheat_rsi_threshold,
         'overheat_ret5_threshold': config.overheat_ret5_threshold,
+        'kdj_low_threshold': config.kdj_low_threshold,
     }
 
 
