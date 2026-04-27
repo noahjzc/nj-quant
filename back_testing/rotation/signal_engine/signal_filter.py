@@ -27,6 +27,26 @@ class KDJGoldSignal(BaseSignal):
         )
 
 
+class KDJGoldLowSignal(BaseSignal):
+    """KDJ 低位金叉检测 — 金叉且 K 值低于阈值"""
+
+    def __init__(self, k_threshold: float = 30.0):
+        super().__init__(SignalType.KDJ_GOLD_LOW)
+        self.k_threshold = k_threshold
+
+    def detect(self, df: pd.DataFrame, stock_code: str) -> SignalResult:
+        k = df['kdj_k']; d = df['kdj_d']
+        triggered = bool(self._cross_up(k, d) and k.iloc[-1] < self.k_threshold)
+        return SignalResult(
+            signal_type=self.signal_type,
+            stock_code=stock_code,
+            triggered=triggered,
+            strength=1.0 if triggered else 0.0,
+            metadata={'kdj_k': k.iloc[-1] if not k.empty else None,
+                      'threshold': self.k_threshold}
+        )
+
+
 class KDJDeathSignal(BaseSignal):
     """KDJ 死叉检测"""
 
@@ -207,6 +227,48 @@ class DMIDeathSignal(BaseSignal):
         )
 
 
+class PSYBuySignal(BaseSignal):
+    """PSY 心理线超卖买入信号 — PSY < 25 且 PSY > PSYMA（超卖 + 趋势确认）"""
+
+    def __init__(self):
+        super().__init__(SignalType.PSY_BUY)
+
+    def detect(self, df: pd.DataFrame, stock_code: str) -> SignalResult:
+        if 'psy' not in df.columns or 'psyma' not in df.columns:
+            return SignalResult(self.signal_type, stock_code, False, 0.0)
+        psy_now = df['psy'].iloc[-1]
+        psyma_now = df['psyma'].iloc[-1]
+        triggered = bool(psy_now < 25 and psy_now > psyma_now)
+        return SignalResult(
+            signal_type=self.signal_type,
+            stock_code=stock_code,
+            triggered=triggered,
+            strength=1.0 if triggered else 0.0,
+            metadata={'psy': psy_now, 'psyma': psyma_now}
+        )
+
+
+class PSYSellSignal(BaseSignal):
+    """PSY 心理线超买卖出信号 — PSY > 75 且 PSY < PSYMA（超买 + 趋势确认）"""
+
+    def __init__(self):
+        super().__init__(SignalType.PSY_SELL)
+
+    def detect(self, df: pd.DataFrame, stock_code: str) -> SignalResult:
+        if 'psy' not in df.columns or 'psyma' not in df.columns:
+            return SignalResult(self.signal_type, stock_code, False, 0.0)
+        psy_now = df['psy'].iloc[-1]
+        psyma_now = df['psyma'].iloc[-1]
+        triggered = bool(psy_now > 75 and psy_now < psyma_now)
+        return SignalResult(
+            signal_type=self.signal_type,
+            stock_code=stock_code,
+            triggered=triggered,
+            strength=1.0 if triggered else 0.0,
+            metadata={'psy': psy_now, 'psyma': psyma_now}
+        )
+
+
 class BollBreakSignal(BaseSignal):
     """布林带上轨突破（从 boll_mid 计算，标准差回溯 20 日）"""
 
@@ -343,13 +405,17 @@ class SignalFilter:
         SignalType.BOLL_BREAK_DOWN: BollBreakDownSignal,
         SignalType.HIGH_BREAK: HighBreakSignal,
         SignalType.HIGH_BREAK_DOWN: HighBreakDownSignal,
+        SignalType.KDJ_GOLD_LOW: KDJGoldLowSignal,
+        SignalType.PSY_BUY: PSYBuySignal,
+        SignalType.PSY_SELL: PSYSellSignal,
     }
 
-    def __init__(self, signal_types: List[str], mode: str = 'OR'):
+    def __init__(self, signal_types: List[str], mode: str = 'OR', kdj_low_threshold: float = 30.0):
         """
         Args:
             signal_types: 信号类型列表
             mode: 'OR' — 任意信号触发即通过 | 'AND' — 所有信号同时触发才通过
+            kdj_low_threshold: KDJ_GOLD_LOW 信号的 K 值阈值
         """
         self.mode = mode
         self.detectors = []
@@ -359,7 +425,10 @@ class SignalFilter:
                 sig_type = SignalType[name]
                 detector_cls = self._SIGNAL_MAP.get(sig_type)
                 if detector_cls:
-                    self.detectors.append(detector_cls())
+                    if detector_cls is KDJGoldLowSignal:
+                        self.detectors.append(detector_cls(k_threshold=kdj_low_threshold))
+                    else:
+                        self.detectors.append(detector_cls())
                 else:
                     unknown_signals.append(name)
             except KeyError:
