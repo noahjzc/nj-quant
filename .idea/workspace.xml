@@ -4,8 +4,20 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="ba9c56f9-9fae-4e2f-bc58-82725a66fec3" name="Changes" comment="docs(specs): 更新每日轮动设计文档并优化缓存策略&#10;&#10;- 添加 cache 目录到 .gitignore&#10;- 重新格式化信号架构文档，增加缩进结构清晰度&#10;- 调整表格对齐格式提升可读性&#10;- 修改市场状态参数配置，降低风险敞口阈值&#10;- 更新参数调整示例数值&#10;- 重构 DailyRotationEngine 数据缓存机制，支持预加载缓存&#10;- 优化回测引擎中指数数据加载逻辑&#10;- 修复基因算法染色体归一化静态方法问题&#10;- 添加 LLM 行为指导原则文档&#10;- 重构复合轮动器继承基类，简化架构&#10;- 更新默认配置参数以适应优化策略&#10;- 优化回测进度显示格式">
+    <list default="true" id="ba9c56f9-9fae-4e2f-bc58-82725a66fec3" name="Changes" comment="fix(config): 清理合并冲突标记并更新IDE配置&#10;&#10;- 移除 .gitignore 文件中的合并冲突标记&#10;- 更新 .idea/workspace.xml 中的变更列表记录&#10;- 修复 PropertiesComponent 的 JSON 格式化问题&#10;- 添加新的工作时间追踪记录&#10;- 移除临时输出文件 ga_output.txt 和 ga_output_utf8.txt&#10;- 删除进度日志文件 progress.md 和任务计划文件 task_plan.md&#10;- 添加数据迁移脚本 migrate_to_ecs.sh&#10;- 添加 Optuna 仪表板服务配置文件&#10;- 添加服务器初始化 SQL 脚本&#10;- 添加服务器表结构创建脚本">
+      <change afterPath="$PROJECT_DIR$/optuna.db" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/scripts/migrate_to_ecs.sh" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/scripts/optuna-dashboard.service" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/scripts/quant_db_data.sql" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/scripts/server_setup_01_init.sql" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/scripts/server_setup_02_tables.sql" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/run_daily_rotation_optimization.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/run_daily_rotation_optimization.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ga_output.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ga_output_utf8.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/progress.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/task_plan.md" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -36,6 +48,7 @@
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
+    "ASKED_MARK_IGNORED_FILES_AS_EXCLUDED": "true",
     "Python.main.executor": "Run",
     "Python.run_backtest.executor": "Run",
     "Python.run_composite_backtest.executor": "Run",
@@ -218,7 +231,7 @@
       <workItem from="1777098761029" duration="1704000" />
       <workItem from="1777102338388" duration="26350000" />
       <workItem from="1777296730598" duration="456000" />
-      <workItem from="1777298314034" duration="119000" />
+      <workItem from="1777298314034" duration="3154000" />
     </task>
     <task id="LOCAL-00001" summary="init">
       <option name="closed" value="true" />
@@ -244,7 +257,15 @@
       <option name="project" value="LOCAL" />
       <updated>1777268402350</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="fix(config): 清理合并冲突标记并更新IDE配置&#10;&#10;- 移除 .gitignore 文件中的合并冲突标记&#10;- 更新 .idea/workspace.xml 中的变更列表记录&#10;- 修复 PropertiesComponent 的 JSON 格式化问题&#10;- 添加新的工作时间追踪记录">
+      <option name="closed" value="true" />
+      <created>1777298556486</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1777298556486</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -265,7 +286,9 @@
     <MESSAGE value="init" />
     <MESSAGE value="refactor(genetic-algorithm): 优化遗传算法因子权重优化设计文档和实现&#10;&#10;- 调整了设计文档中的表格格式，统一列宽和对齐方式&#10;- 重构适应度评估器，实现简化版回测用于GA评估&#10;- 添加了带超时和重试的baostock查询功能&#10;- 更新染色体类文档，明确因子权重约束和归一化逻辑&#10;- 修复数据列名引用，使用统一的数据列名常量&#10;- 优化回测引擎中的日期处理和数据加载逻辑&#10;- 完善复合轮动器的数据提供器集成&#10;- 更新指数数据导入计划的文件结构说明" />
     <MESSAGE value="docs(specs): 更新每日轮动设计文档并优化缓存策略&#10;&#10;- 添加 cache 目录到 .gitignore&#10;- 重新格式化信号架构文档，增加缩进结构清晰度&#10;- 调整表格对齐格式提升可读性&#10;- 修改市场状态参数配置，降低风险敞口阈值&#10;- 更新参数调整示例数值&#10;- 重构 DailyRotationEngine 数据缓存机制，支持预加载缓存&#10;- 优化回测引擎中指数数据加载逻辑&#10;- 修复基因算法染色体归一化静态方法问题&#10;- 添加 LLM 行为指导原则文档&#10;- 重构复合轮动器继承基类，简化架构&#10;- 更新默认配置参数以适应优化策略&#10;- 优化回测进度显示格式" />
-    <option name="LAST_COMMIT_MESSAGE" value="docs(specs): 更新每日轮动设计文档并优化缓存策略&#10;&#10;- 添加 cache 目录到 .gitignore&#10;- 重新格式化信号架构文档，增加缩进结构清晰度&#10;- 调整表格对齐格式提升可读性&#10;- 修改市场状态参数配置，降低风险敞口阈值&#10;- 更新参数调整示例数值&#10;- 重构 DailyRotationEngine 数据缓存机制，支持预加载缓存&#10;- 优化回测引擎中指数数据加载逻辑&#10;- 修复基因算法染色体归一化静态方法问题&#10;- 添加 LLM 行为指导原则文档&#10;- 重构复合轮动器继承基类，简化架构&#10;- 更新默认配置参数以适应优化策略&#10;- 优化回测进度显示格式" />
+    <MESSAGE value="fix(config): 清理合并冲突标记并更新IDE配置&#10;&#10;- 移除 .gitignore 文件中的合并冲突标记&#10;- 更新 .idea/workspace.xml 中的变更列表记录&#10;- 修复 PropertiesComponent 的 JSON 格式化问题&#10;- 添加新的工作时间追踪记录" />
+    <MESSAGE value="fix(config): 清理合并冲突标记并更新IDE配置&#10;&#10;- 移除 .gitignore 文件中的合并冲突标记&#10;- 更新 .idea/workspace.xml 中的变更列表记录&#10;- 修复 PropertiesComponent 的 JSON 格式化问题&#10;- 添加新的工作时间追踪记录&#10;- 移除临时输出文件 ga_output.txt 和 ga_output_utf8.txt&#10;- 删除进度日志文件 progress.md 和任务计划文件 task_plan.md&#10;- 添加数据迁移脚本 migrate_to_ecs.sh&#10;- 添加 Optuna 仪表板服务配置文件&#10;- 添加服务器初始化 SQL 脚本&#10;- 添加服务器表结构创建脚本" />
+    <option name="LAST_COMMIT_MESSAGE" value="fix(config): 清理合并冲突标记并更新IDE配置&#10;&#10;- 移除 .gitignore 文件中的合并冲突标记&#10;- 更新 .idea/workspace.xml 中的变更列表记录&#10;- 修复 PropertiesComponent 的 JSON 格式化问题&#10;- 添加新的工作时间追踪记录&#10;- 移除临时输出文件 ga_output.txt 和 ga_output_utf8.txt&#10;- 删除进度日志文件 progress.md 和任务计划文件 task_plan.md&#10;- 添加数据迁移脚本 migrate_to_ecs.sh&#10;- 添加 Optuna 仪表板服务配置文件&#10;- 添加服务器初始化 SQL 脚本&#10;- 添加服务器表结构创建脚本" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>

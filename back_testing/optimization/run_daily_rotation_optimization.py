@@ -255,20 +255,27 @@ def run_single_optimization(
     output_dir: str = None,
     n_jobs: int = 1,
     data_provider=None,
+    storage_url: str = None,
 ) -> Tuple[RotationConfig, float, optuna.Study]:
     """单期优化：在固定日期范围内搜索最优参数
 
     Args:
         n_jobs: 并行 Trial 数（1=串行，-1=全部核心）
         data_provider: 数据提供器，None 则每次新建 DataProvider（慢）
+        storage_url: Optuna 持久化存储 URL（如 sqlite:///optuna.db），
+                     None 则使用内存存储（默认）
 
     Returns:
         (best_config, best_sharpe, study)
     """
+    storage_kwargs = {}
+    if storage_url:
+        storage_kwargs['storage'] = f"{storage_url}"
     study = optuna.create_study(
         direction='maximize',
         sampler=optuna.samplers.TPESampler(seed=42),
         study_name=study_name,
+        **storage_kwargs,
     )
 
     preload_cache_path = _build_preload_cache(data_provider, base_config, start_date, end_date)
@@ -303,12 +310,14 @@ def run_walk_forward(
     output_dir: str = None,
     n_jobs: int = 1,
     data_provider=None,
+    storage_url: str = None,
 ) -> List[Dict]:
     """Walk-Forward 滚动优化
 
     Args:
         n_jobs: 并行 Trial 数
         data_provider: 数据提供器，None 则每次新建（慢）
+        storage_url: Optuna 持久化存储 URL，None 则使用内存存储
 
     Returns:
         List of dicts，每个窗口一条记录
@@ -340,6 +349,7 @@ def run_walk_forward(
             output_dir=output_dir,
             n_jobs=n_jobs,
             data_provider=data_provider,
+            storage_url=storage_url,
         )
 
         # 测试期评估
@@ -570,6 +580,7 @@ if __name__ == '__main__':
     parser.add_argument('--test-months', type=int, default=6, help='WF 测试期（月）')
     parser.add_argument('--step-months', type=int, default=3, help='WF 步进（月）')
     parser.add_argument('--no-cache', action='store_true', help='不使用缓存（每次从 DB 查询）')
+    parser.add_argument('--storage', default=None, help='Optuna 持久化存储（如 sqlite:///optuna.db），默认内存模式')
     parser.add_argument('--verbose', action='store_true', help='详细日志')
 
     args = parser.parse_args()
@@ -602,6 +613,7 @@ if __name__ == '__main__':
             output_dir=args.output,
             n_jobs=args.n_jobs,
             data_provider=cached_provider,
+            storage_url=args.storage,
         )
     else:
         run_walk_forward(
@@ -615,4 +627,5 @@ if __name__ == '__main__':
             output_dir=args.output,
             n_jobs=args.n_jobs,
             data_provider=cached_provider,
+            storage_url=args.storage,
         )
