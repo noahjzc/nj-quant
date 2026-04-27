@@ -471,7 +471,6 @@ class DailyRotationEngine:
             'close': latest['close'], 'close_std_20': latest['close_std_20'],
             'boll_mid': latest['boll_mid'], 'high_20_max': latest['high_20_max'],
             'psy': latest['psy'], 'psyma': latest['psyma'],
-            'psy_p': prev['psy'], 'psyma_p': prev['psyma'],
         }, index=latest.index)
 
     def _execute_buy(

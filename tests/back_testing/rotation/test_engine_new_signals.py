@@ -31,8 +31,6 @@ class TestBuildSignalFeatures:
         features = engine._build_signal_features(['sh600001'])
         assert 'psy' in features.columns
         assert 'psyma' in features.columns
-        assert 'psy_p' in features.columns
-        assert 'psyma_p' in features.columns
 
 
 class TestNewFactorExtraction:

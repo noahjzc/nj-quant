@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **quantitative stock trading** system for Chinese markets (A股). It implements a multi-factor stock selection and backtesting framework with performance analysis capabilities.
+This is a **quantitative stock trading** system for Chinese markets (A股). It implements a daily rotation backtesting framework with Optuna-based parameter optimization, multi-factor stock ranking, and performance analysis.
 
 ## Running the Project
 
@@ -12,112 +12,131 @@ This is a **quantitative stock trading** system for Chinese markets (A股). It i
 # Activate virtual environment
 .venv\Scripts\activate  # Windows
 
-# Run composite backtest
-python back_testing/backtest/run_composite_backtest.py
+# Single daily rotation backtest
+python back_testing/backtest/run_daily_rotation.py --start 2024-01-01 --end 2024-12-31
 
-# Run rotator backtest
-python back_testing/backtest/run_rotator_backtest.py
+# Optuna optimization — single-period
+python back_testing/optimization/run_daily_rotation_optimization.py \
+    --mode single --start 2024-01-01 --end 2024-12-31 --trials 100
 
-# Run full backtest
-python back_testing/backtest/run_full_backtest.py
+# Optuna optimization — walk-forward
+python back_testing/optimization/run_daily_rotation_optimization.py \
+    --mode walkforward --start 2022-01-01 --end 2024-12-31 --trials 50
 
-# Run tests
+# Run all tests
 pytest tests/back_testing/ -v
 
-# Run specific test file
-pytest tests/back_testing/test_factor_utils.py -v
+# Run specific test files
+pytest tests/back_testing/rotation/test_overheat.py -v
+pytest tests/back_testing/optimization/test_daily_rotation_optuna.py -v
+pytest tests/back_testing/test_multi_factor_selector.py -v
 ```
 
 ## Architecture
 
 ```
 back_testing/
-├── backtest/              # Backtest entry points
-│   ├── run_composite_backtest.py   # Main composite backtest
-│   ├── run_rotator_backtest.py     # Rotator-based backtest
-│   └── run_full_backtest.py        # Full backtest runner
-├── data/                  # Data access layer
-│   ├── data_provider.py   # Unified data access (Parquet/CSV)
-│   └── index_data_provider.py  # Index data for benchmark
-├── factors/              # Multi-factor model
-│   ├── factor_utils.py   # FactorProcessor (rank, zscore, winsorize)
-│   ├── factor_config.py  # Factor weights & directions
-│   └── factor_loader.py  # Load stock factor data
-├── selectors/            # Stock selection
-│   ├── composite_selector.py      # Original composite selector
-│   ├── multi_factor_selector.py   # Multi-factor selector (new)
-│   └── stock_selector.py
-├── strategies/           # Trading strategies
-│   ├── rsi_strategy.py, macd_strategy.py, kdj_strategy.py
-│   ├── ma_strategy.py, bollinger_strategy.py
-│   └── volume_strategy.py, multi_rsi_strategy.py
-├── risk/                # Risk management
+├── rotation/                     # Daily rotation engine (active system)
+│   ├── daily_rotation_engine.py  # Core engine: Master DataFrame cache, vectorized signals
+│   ├── config.py                 # RotationConfig, MarketRegimeConfig dataclasses
+│   ├── market_regime.py          # Market state detector (strong/neutral/weak)
+│   ├── position_manager.py       # Position sizing with regime-aware limits
+│   ├── trade_executor.py         # Trade execution and TradeRecord
+│   ├── signal_engine/
+│   │   ├── signal_filter.py      # Buy/sell signal detection (14 signal types)
+│   │   └── signal_ranker.py      # Multi-factor weighted ranking with z-score
+│   └── strategy.py               # Strategy interface
+├── optimization/                 # Parameter optimization
+│   ├── run_daily_rotation_optimization.py  # Optuna CLI (single/walkforward)
+│   └── run_optimization.py       # Composite rotator optimization
+├── data/                         # Data access layer
+│   ├── data_provider.py          # Direct PostgreSQL access (SQLAlchemy)
+│   ├── daily_data_cache.py       # Parquet cache + CachedProvider (cross-trial reuse)
+│   └── db/                       # Database models and connection
+├── analysis/                     # Performance analysis
+│   ├── performance_analyzer.py   # Sharpe, Calmar, max drawdown, win rate
+│   └── visualizer.py             # Charts and HTML reports
+├── backtest/                     # Entry points
+│   ├── run_daily_rotation.py     # Single daily rotation backtest
+│   ├── run_composite_backtest.py # Legacy composite backtest
+│   └── run_rotator_backtest.py   # Legacy rotator backtest
+├── risk/                         # Risk management
 │   ├── risk_manager.py
 │   ├── position_manager.py
-│   └── stop_loss_strategies.py
-├── analysis/            # Performance analysis
-│   ├── performance_analyzer.py  # Sharpe, Calmar, Alpha, Beta
-│   └── visualizer.py           # Charts and HTML reports
-├── core/                # Core backtest engine
-│   └── backtest_engine.py
-└── composite_rotator.py  # Main weekly rotation controller
+│   └── stop_loss_strategies.py   # ATR stop-loss/take-profit, trailing stop
+├── factors/                      # Factor utilities
+│   ├── factor_utils.py           # FactorProcessor (rank, zscore, winsorize)
+│   └── factor_loader.py          # Load stock factor data
+├── selectors/                    # Stock selection (legacy)
+└── core/                         # Core backtest engine (legacy)
 ```
 
-## Key Concepts
+## Daily Rotation Engine
 
-- **Stock codes**: Shanghai `sh` prefix, Shenzhen `sz` prefix
-- **Data format**: Parquet (default, fast) or CSV with GBK encoding
-- **Multi-factor selection**: Weighted scoring across valuation, momentum, trend, and trading factors
-- **Factor directions**: `1` = larger is better, `-1` = smaller is better
-- **Backtest flow**: `CompositeRotator.run_weekly()` → factor selection → rebalance → performance analysis
+The engine (`DailyRotationEngine`) processes one trading day at a time:
 
-## Multi-Factor Model
+1. **Preload**: 30 days of history loaded into a single Master DataFrame (indexed by `trade_date`, with `stock_code` column), avoiding per-stock I/O
+2. **Per day**: Update cache → detect market regime → build signal features (vectorized) → check exits (sell signals + ATR stops + trailing stop) → rank candidates → allocate buys
+3. **Two-phase execution**: Sell phase first (free up cash), then buy phase (allocate to top-ranked candidates)
+4. **Signal pipeline**: Layer 1 = binary signal detection (14 signal types), Layer 2 = multi-factor weighted ranking (z-score + direction-adjusted weighted sum)
 
-The system supports two stock selection modes:
-1. **Multi-factor (default)**: Uses `MultiFactorSelector` with configured factor weights
-2. **Composite scoring**: Uses `CompositeSelector` with strategy signals
+Key performance optimizations:
+- `_build_signal_features()`: Vectorized via groupby rolling transforms on the master cache `tail(21)` per stock, producing a feature matrix for all candidates in a single operation
+- `_cache_df` updated incrementally per day (no repeated queries)
+- `CachedProvider` reads from pre-built Parquet files (no DB queries during optimization trials)
 
-Factor configuration (`factor_config.py`):
-- **Valuation**: PB, PE_TTM, PS_TTM (lower is better, direction=-1)
-- **Momentum**: RSI_1, KDJ_K (stronger is better, direction=1)
-- **Trend**: MA_5, MA_20 (uptrend is better, direction=1)
-- **Trading**: TURNOVER, VOLUME_RATIO (more active is better, direction=1)
-- **Volatility**: AMPLITUDE (lower is better, direction=-1)
+## Configuration
 
-## Data Provider
+`RotationConfig` is a Python dataclass. **All fields must have type annotations** — unannotated fields become class variables, not instance fields, and won't appear in `__init__`.
 
-```python
-from back_testing.data.data_provider import DataProvider
+Key config groups:
+- **Position sizing**: `max_total_pct`, `max_position_pct`, `max_positions`
+- **Buy signals**: `buy_signal_types` (list), `buy_signal_mode` (`'AND'`/`'OR'`)
+- **Rank factors**: `rank_factor_weights` (dict), `rank_factor_directions` (dict: 1/-1)
+- **Market regime**: `MarketRegimeConfig` with strong/neutral/weak state params
+- **Stops**: ATR-based stop-loss/take-profit multipliers, trailing stop thresholds
+- **Overheat penalty**: RSI + 5-day return thresholds to avoid chasing overbought stocks
 
-provider = DataProvider()  # Uses Parquet by default
-df = provider.get_stock_data('sh600519', date='2024-01-15')
-```
+## Data Access: Two Providers
 
-## Strategy Implementation
+**`DataProvider`** (direct DB): Queries PostgreSQL via SQLAlchemy. Used for single backtests.
+- `get_all_stock_codes()` → `list`
+- `get_batch_histories(codes, end_date, start_date)` → `{code: DataFrame}`
+- `get_index_data(index_code, start_date, end_date)` → `DataFrame`
+- `get_stocks_for_date(codes, date)` → `{code: dict}` — dicts do NOT contain `stock_code` key
 
-Implement `AbstractStrategy` to create a trading strategy:
+**`CachedProvider`** (Parquet): Reads from pre-built Parquet cache. Used by Optuna trials for cross-trial data reuse.
+- Same interface as DataProvider for the three main methods
+- Extra: `get_daily_dataframe(date)` → full market DataFrame (used by engine fast path)
 
-```python
-class MyStrategy(AbstractStrategy):
-    def fill_factor(self, data: DataFrame) -> DataFrame:
-        data[STRATEGY_FACTOR] = ...
-        return data
-```
+Build cache once before optimization: `DailyDataCache.build(start, end, cache_dir)`
 
-## Performance Metrics
+## Optimization
 
-The `PerformanceAnalyzer` calculates:
-- **Absolute**: Total return, annual return, max drawdown
-- **Risk-adjusted**: Sharpe ratio, Calmar ratio, Sortino ratio
-- **Relative**: Alpha, Beta, information ratio
-- **Trading**: Win rate, profit/loss ratio, avg holding days, turnover
+Uses **Optuna TPE** (Tree-structured Parzen Estimator) for Bayesian optimization.
+
+14 sampled parameters in `sample_config()`: position sizing, signal mode, factor weights, ATR stops, trailing stop, overheat thresholds.
+
+Modes:
+- `single`: Optimize over one date range, minimize `-Sharpe`
+- `walkforward`: Rolling windows, report per-window stats
+
+Dependencies: `optuna` is required but NOT listed in `requirements.txt`.
+
+## Known Pitfalls
+
+1. **Dataclass fields need type annotations**: `field_name = value` creates a class variable, not an instance field. Use `field_name: type = value`. Missing annotations on `RotationConfig` caused all Optuna trials to fail with `unexpected keyword argument`.
+
+2. **`get_stocks_for_date()` missing `stock_code`**: Row dicts from `DataProvider.get_stocks_for_date()` don't include `stock_code`. Engine's `_advance_to_date` must add it: `row_data['stock_code'] = stock_code`. Missing this caused zero trades (all rows invisible to stock_code-based filtering).
+
+3. **Signal feature index alignment**: `groupby.last()` returns `stock_code` index; `groupby.nth(-2)` returns original index. Must align both to the same index before combining into a feature DataFrame.
 
 ## Important Notes
 
-- Chinese column names are defined in `data_column_names.py`
-- Data files use GBK encoding for CSV
-- Default data path: `data/daily_ycz/*.parquet`
-- Index data path: `data/metadata/daily_ycz/index/`
+- Stock codes: Shanghai `sh` prefix, Shenzhen `sz` prefix
+- Factor directions: `1` = larger is better, `-1` = smaller is better
+- Database config: `config/database.ini` (PostgreSQL)
+- Virtual environment: `.venv/` (Windows)
 
 
 Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.

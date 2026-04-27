@@ -10,6 +10,7 @@
         --mode walkforward --start 2022-01-01 --end 2024-12-31 --trials 50
 """
 import argparse
+import datetime
 import json
 import logging
 import math
@@ -73,14 +74,10 @@ def compute_sharpe(equity: List[float], periods_per_year: int = 252) -> float:
 # ═══════════════════════════════════════════════
 
 # 可优化信号的完整列表
-ALL_SIGNAL_TYPES = ['KDJ_GOLD', 'MACD_GOLD', 'MA_GOLD', 'VOL_GOLD', 'BOLL_BREAK', 'HIGH_BREAK', 'KDJ_GOLD_LOW']
+ALL_SIGNAL_TYPES = ['KDJ_GOLD', 'MACD_GOLD', 'MA_GOLD', 'VOL_GOLD', 'BOLL_BREAK', 'HIGH_BREAK', 'KDJ_GOLD_LOW', 'PSY_BUY']
 
-# 固定参数（不参与优化）
-FIXED_FACTOR_DIRECTIONS = {
-    'RSI_1': 1, 'RET_20': 1, 'VOLUME_RATIO': 1,
-    'PB': -1, 'PE_TTM': -1, 'OVERHEAT': -1,
-    'circulating_mv': -1, 'WR_10': -1, 'WR_14': -1,
-}
+# 固定参数（不参与优化）— 单一来源：RotationConfig 默认值
+FIXED_FACTOR_DIRECTIONS = RotationConfig().rank_factor_directions
 
 
 def sample_config(trial: optuna.Trial, base_config: RotationConfig = None) -> RotationConfig:
@@ -397,7 +394,7 @@ def _params_to_config(params: Dict, base_config: RotationConfig = None) -> Rotat
         max_positions=params['max_positions'],
         buy_signal_types=active_signals,
         buy_signal_mode=params['buy_signal_mode'],
-        sell_signal_types=base.sell_signal_types,
+        sell_signal_types=params.get('sell_signal_types', base.sell_signal_types),
         rank_factor_weights=rank_factor_weights,
         rank_factor_directions=FIXED_FACTOR_DIRECTIONS,
         market_regime=base.market_regime,
@@ -458,23 +455,36 @@ def _evaluate_on_test(config: RotationConfig, start: str, end: str,
 
 
 def _config_to_dict(config: RotationConfig) -> Dict:
-    """将 RotationConfig 序列化为可 JSON 化的 dict"""
-    return {
-        'max_total_pct': config.max_total_pct,
-        'max_position_pct': config.max_position_pct,
-        'max_positions': config.max_positions,
-        'buy_signal_types': config.buy_signal_types,
-        'buy_signal_mode': config.buy_signal_mode,
-        'rank_factor_weights': config.rank_factor_weights,
-        'atr_period': config.atr_period,
-        'stop_loss_mult': config.stop_loss_mult,
-        'take_profit_mult': config.take_profit_mult,
-        'trailing_pct': config.trailing_pct,
-        'trailing_start': config.trailing_start,
-        'overheat_rsi_threshold': config.overheat_rsi_threshold,
-        'overheat_ret5_threshold': config.overheat_ret5_threshold,
-        'kdj_low_threshold': config.kdj_low_threshold,
-    }
+    """将 RotationConfig 序列化为 Optuna 原始参数格式，确保 _params_to_config 可无损还原"""
+    result: Dict = {}
+
+    # 因子权重（输出当前归一化值，_params_to_config 二次归一化后不变）
+    for factor, direction in FIXED_FACTOR_DIRECTIONS.items():
+        result[f'weight_{factor}'] = config.rank_factor_weights.get(
+            factor, 0.01 if factor == 'OVERHEAT' else 0.05
+        )
+
+    # 买入信号开关
+    for sig in ALL_SIGNAL_TYPES:
+        result[f'signal_{sig}'] = 'on' if sig in config.buy_signal_types else 'off'
+    result['fallback_signal'] = config.buy_signal_types[0] if config.buy_signal_types else ALL_SIGNAL_TYPES[0]
+
+    # 连续 / 整数 / 分类参数
+    result['buy_signal_mode'] = config.buy_signal_mode
+    result['max_total_pct'] = config.max_total_pct
+    result['max_position_pct'] = config.max_position_pct
+    result['max_positions'] = config.max_positions
+    result['atr_period'] = config.atr_period
+    result['stop_loss_mult'] = config.stop_loss_mult
+    result['take_profit_mult'] = config.take_profit_mult
+    result['trailing_pct'] = config.trailing_pct
+    result['trailing_start'] = config.trailing_start
+    result['overheat_rsi_threshold'] = config.overheat_rsi_threshold
+    result['overheat_ret5_threshold'] = config.overheat_ret5_threshold
+    result['kdj_low_threshold'] = config.kdj_low_threshold
+    result['sell_signal_types'] = list(config.sell_signal_types)
+
+    return result
 
 
 def _save_results(study: optuna.Study, best_config: RotationConfig,
@@ -485,7 +495,8 @@ def _save_results(study: optuna.Study, best_config: RotationConfig,
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # 最优参数
-    best_path = output_dir / f'best_params_{time.time()}.json'
+    now = time.time()
+    best_path = output_dir / f'best_params_{now}.json'
     best_data = {
         'start_date': start,
         'end_date': end,
@@ -497,7 +508,7 @@ def _save_results(study: optuna.Study, best_config: RotationConfig,
     print(f"最优参数已保存: {best_path}")
 
     # Trial 记录
-    trials_path = output_dir / 'optuna_trials.csv'
+    trials_path = output_dir / 'optuna_trials_{now}.csv'
     df = study.trials_dataframe()
     df.to_csv(trials_path, index=False, encoding='utf-8-sig')
     print(f"Trial 记录已保存: {trials_path} ({len(df)} 条)")
@@ -519,9 +530,10 @@ def _print_wf_summary(records: List[Dict]):
 
 def _save_wf_results(records: List[Dict], output_dir: str = None):
     """保存 Walk-Forward 结果"""
+    now = time.time()
     output_dir = Path(output_dir or '.')
     output_dir.mkdir(parents=True, exist_ok=True)
-    path = output_dir / 'walkforward_results.json'
+    path = output_dir / f'walkforward_results_{now}.json'
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(records, f, indent=2, ensure_ascii=False)
     print(f"Walk-Forward 结果已保存: {path}")

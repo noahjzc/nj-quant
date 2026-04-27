@@ -4,39 +4,13 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="ba9c56f9-9fae-4e2f-bc58-82725a66fec3" name="Changes" comment="refactor(genetic-algorithm): 优化遗传算法因子权重优化设计文档和实现&#10;&#10;- 调整了设计文档中的表格格式，统一列宽和对齐方式&#10;- 重构适应度评估器，实现简化版回测用于GA评估&#10;- 添加了带超时和重试的baostock查询功能&#10;- 更新染色体类文档，明确因子权重约束和归一化逻辑&#10;- 修复数据列名引用，使用统一的数据列名常量&#10;- 优化回测引擎中的日期处理和数据加载逻辑&#10;- 完善复合轮动器的数据提供器集成&#10;- 更新指数数据导入计划的文件结构说明">
-      <change beforePath="$PROJECT_DIR$/.claude/settings.local.json" beforeDir="false" afterPath="$PROJECT_DIR$/.claude/settings.local.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+    <list default="true" id="ba9c56f9-9fae-4e2f-bc58-82725a66fec3" name="Changes" comment="docs(specs): 更新每日轮动设计文档并优化缓存策略&#10;&#10;- 添加 cache 目录到 .gitignore&#10;- 重新格式化信号架构文档，增加缩进结构清晰度&#10;- 调整表格对齐格式提升可读性&#10;- 修改市场状态参数配置，降低风险敞口阈值&#10;- 更新参数调整示例数值&#10;- 重构 DailyRotationEngine 数据缓存机制，支持预加载缓存&#10;- 优化回测引擎中指数数据加载逻辑&#10;- 修复基因算法染色体归一化静态方法问题&#10;- 添加 LLM 行为指导原则文档&#10;- 重构复合轮动器继承基类，简化架构&#10;- 更新默认配置参数以适应优化策略&#10;- 优化回测进度显示格式">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/analysis/performance_analyzer.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/analysis/performance_analyzer.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/backtest/run_composite_backtest.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/backtest/run_composite_backtest.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/backtest/run_rotator_backtest.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/backtest/run_rotator_backtest.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/composite_rotator.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/composite_rotator.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/core/backtest_engine.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/core/backtest_engine.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/data/data_provider.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/data/data_provider.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/factors/factor_loader.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/factors/factor_loader.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/chromosome.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/chromosome.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/fitness.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/fitness.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/mutation.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/mutation.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/niching.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/optimizer.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/optimizer.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/walk_forward.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/walk_forward.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/back_testing/optimization/run_daily_rotation_optimization.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/run_daily_rotation_optimization.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/optimization/run_optimization.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/run_optimization.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/portfolio_rotator.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/portfolio_rotator.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/risk/position_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/risk/position_manager.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/risk/risk_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/risk/risk_manager.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/risk/stop_loss_strategies.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/risk/stop_loss_strategies.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/back_testing/rotation/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/rotation/config.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/back_testing/rotation/daily_rotation_engine.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/rotation/daily_rotation_engine.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/rotation/signal_engine/signal_filter.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/rotation/signal_engine/signal_filter.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/selectors/composite_selector.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/selectors/composite_selector.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/selectors/multi_factor_selector.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/selectors/multi_factor_selector.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/selectors/stock_selector.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/selectors/stock_selector.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/superpowers/plans/2026-04-25-new-stock-filter-impl-plan.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/superpowers/plans/2026-04-25-new-stock-filter-impl-plan.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/superpowers/specs/2026-04-25-daily-rotation-design.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/superpowers/specs/2026-04-25-daily-rotation-design.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/back_testing/test_multi_factor_selector.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/back_testing/test_multi_factor_selector.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/rotation/test_engine_new_signals.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/back_testing/rotation/test_engine_new_signals.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -247,7 +221,8 @@
       <workItem from="1776816664072" duration="790000" />
       <workItem from="1776822131119" duration="24588000" />
       <workItem from="1777098761029" duration="1704000" />
-      <workItem from="1777102338388" duration="17784000" />
+      <workItem from="1777102338388" duration="26350000" />
+      <workItem from="1777296730598" duration="456000" />
     </task>
     <task id="LOCAL-00001" summary="init">
       <option name="closed" value="true" />
@@ -265,16 +240,36 @@
       <option name="project" value="LOCAL" />
       <updated>1776999058711</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="docs(specs): 更新每日轮动设计文档并优化缓存策略&#10;&#10;- 添加 cache 目录到 .gitignore&#10;- 重新格式化信号架构文档，增加缩进结构清晰度&#10;- 调整表格对齐格式提升可读性&#10;- 修改市场状态参数配置，降低风险敞口阈值&#10;- 更新参数调整示例数值&#10;- 重构 DailyRotationEngine 数据缓存机制，支持预加载缓存&#10;- 优化回测引擎中指数数据加载逻辑&#10;- 修复基因算法染色体归一化静态方法问题&#10;- 添加 LLM 行为指导原则文档&#10;- 重构复合轮动器继承基类，简化架构&#10;- 更新默认配置参数以适应优化策略&#10;- 优化回测进度显示格式">
+      <option name="closed" value="true" />
+      <created>1777268402350</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1777268402350</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
   </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="init" />
     <MESSAGE value="refactor(genetic-algorithm): 优化遗传算法因子权重优化设计文档和实现&#10;&#10;- 调整了设计文档中的表格格式，统一列宽和对齐方式&#10;- 重构适应度评估器，实现简化版回测用于GA评估&#10;- 添加了带超时和重试的baostock查询功能&#10;- 更新染色体类文档，明确因子权重约束和归一化逻辑&#10;- 修复数据列名引用，使用统一的数据列名常量&#10;- 优化回测引擎中的日期处理和数据加载逻辑&#10;- 完善复合轮动器的数据提供器集成&#10;- 更新指数数据导入计划的文件结构说明" />
-    <option name="LAST_COMMIT_MESSAGE" value="refactor(genetic-algorithm): 优化遗传算法因子权重优化设计文档和实现&#10;&#10;- 调整了设计文档中的表格格式，统一列宽和对齐方式&#10;- 重构适应度评估器，实现简化版回测用于GA评估&#10;- 添加了带超时和重试的baostock查询功能&#10;- 更新染色体类文档，明确因子权重约束和归一化逻辑&#10;- 修复数据列名引用，使用统一的数据列名常量&#10;- 优化回测引擎中的日期处理和数据加载逻辑&#10;- 完善复合轮动器的数据提供器集成&#10;- 更新指数数据导入计划的文件结构说明" />
+    <MESSAGE value="docs(specs): 更新每日轮动设计文档并优化缓存策略&#10;&#10;- 添加 cache 目录到 .gitignore&#10;- 重新格式化信号架构文档，增加缩进结构清晰度&#10;- 调整表格对齐格式提升可读性&#10;- 修改市场状态参数配置，降低风险敞口阈值&#10;- 更新参数调整示例数值&#10;- 重构 DailyRotationEngine 数据缓存机制，支持预加载缓存&#10;- 优化回测引擎中指数数据加载逻辑&#10;- 修复基因算法染色体归一化静态方法问题&#10;- 添加 LLM 行为指导原则文档&#10;- 重构复合轮动器继承基类，简化架构&#10;- 更新默认配置参数以适应优化策略&#10;- 优化回测进度显示格式" />
+    <option name="LAST_COMMIT_MESSAGE" value="docs(specs): 更新每日轮动设计文档并优化缓存策略&#10;&#10;- 添加 cache 目录到 .gitignore&#10;- 重新格式化信号架构文档，增加缩进结构清晰度&#10;- 调整表格对齐格式提升可读性&#10;- 修改市场状态参数配置，降低风险敞口阈值&#10;- 更新参数调整示例数值&#10;- 重构 DailyRotationEngine 数据缓存机制，支持预加载缓存&#10;- 优化回测引擎中指数数据加载逻辑&#10;- 修复基因算法染色体归一化静态方法问题&#10;- 添加 LLM 行为指导原则文档&#10;- 重构复合轮动器继承基类，简化架构&#10;- 更新默认配置参数以适应优化策略&#10;- 优化回测进度显示格式" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>

@@ -40,6 +40,7 @@ class RotationConfig:
         "MACD_GOLD",
         "HIGH_BREAK",
         "KDJ_GOLD_LOW",
+        "PSY_BUY",
     ])
     buy_signal_mode: str = 'AND'  # 'OR': 任意信号触发 | 'AND': 所有信号同时触发
     sell_signal_types: List[str] = field(default_factory=lambda: [
@@ -48,15 +49,15 @@ class RotationConfig:
     ])
     # 排序因子及权重
     rank_factor_weights: Dict[str, float] = field(default_factory=lambda: {
-        "RSI_1": 0.16204620597712574,
-        "RET_20": 0.1639296507048362,
-        "VOLUME_RATIO": 0.06851020411739067,
-        "PB": 0.24923532669436346,
-        "PE_TTM": 0.2650605509924776,
-        "OVERHEAT": 0.0912180615138063,
-        "circulating_mv": 0.15,
-        "WR_10": 0.10,
-        "WR_14": 0.10,
+        "RSI_1": 0.12003422664972277,
+        "RET_20": 0.12142937089247126,
+        "VOLUME_RATIO": 0.05074829934621531,
+        "PB": 0.18461876051434330,
+        "PE_TTM": 0.19634114888331674,
+        "OVERHEAT": 0.06756893445467133,
+        "circulating_mv": 0.11111111111111110,
+        "WR_10": 0.07407407407407407,
+        "WR_14": 0.07407407407407407,
     })
     rank_factor_directions: Dict[str, int] = field(default_factory=lambda: {
         'RSI_1': 1,
