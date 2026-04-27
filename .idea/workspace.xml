@@ -1,0 +1,297 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="ba9c56f9-9fae-4e2f-bc58-82725a66fec3" name="Changes" comment="docs(specs): 更新每日轮动设计文档并优化缓存策略&#10;&#10;- 添加 cache 目录到 .gitignore&#10;- 重新格式化信号架构文档，增加缩进结构清晰度&#10;- 调整表格对齐格式提升可读性&#10;- 修改市场状态参数配置，降低风险敞口阈值&#10;- 更新参数调整示例数值&#10;- 重构 DailyRotationEngine 数据缓存机制，支持预加载缓存&#10;- 优化回测引擎中指数数据加载逻辑&#10;- 修复基因算法染色体归一化静态方法问题&#10;- 添加 LLM 行为指导原则文档&#10;- 重构复合轮动器继承基类，简化架构&#10;- 更新默认配置参数以适应优化策略&#10;- 优化回测进度显示格式">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/run_daily_rotation_optimization.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/run_daily_rotation_optimization.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/rotation/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/rotation/config.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/rotation/daily_rotation_engine.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/rotation/daily_rotation_engine.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/rotation/test_engine_new_signals.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/back_testing/rotation/test_engine_new_signals.py" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="HighlightingSettingsPerFile">
+    <setting file="file://$USER_HOME$/AppData/Local/JetBrains/PyCharm2025.1/python_stubs/-2115902539/builtins.py" root0="SKIP_INSPECTION" />
+    <setting file="file://$PROJECT_DIR$/.venv/Lib/site-packages/pandas/core/frame.py" root0="SKIP_INSPECTION" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 3
+}</component>
+  <component name="ProjectId" id="2wIuXWFi1MJDztWf0FVnNk7GCsg" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Python.main.executor&quot;: &quot;Run&quot;,
+    &quot;Python.run_backtest.executor&quot;: &quot;Run&quot;,
+    &quot;Python.run_composite_backtest.executor&quot;: &quot;Run&quot;,
+    &quot;Python.run_full_backtest.executor&quot;: &quot;Run&quot;,
+    &quot;Python.run_optimization.executor&quot;: &quot;Debug&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
+    &quot;last_opened_file_path&quot;: &quot;D:/workspace/code/mine/quant/nj-quant&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;editor.preferences.fonts.default&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  }
+}</component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="D:\workspace\code\mine\quant\nj-quant" />
+      <recent name="D:\workspace\code\mine\quant\nj-quant\fetch_data" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="D:\workspace\code\mine\quant\nj-quant\doc" />
+    </key>
+  </component>
+  <component name="RunManager" selected="Python.run_optimization">
+    <configuration name="main" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="nj-quant" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/main.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="run_backtest" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="nj-quant" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/back_testing" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/back_testing/run_backtest.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="run_composite_backtest" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="nj-quant" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/back_testing" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/back_testing/run_composite_backtest.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="run_full_backtest" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="nj-quant" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/back_testing" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/back_testing/run_full_backtest.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="run_optimization" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="nj-quant" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/back_testing/optimization" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/back_testing/optimization/run_optimization.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Python.run_optimization" />
+        <item itemvalue="Python.run_composite_backtest" />
+        <item itemvalue="Python.run_full_backtest" />
+        <item itemvalue="Python.run_backtest" />
+        <item itemvalue="Python.main" />
+      </list>
+    </recent_temporary>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-js-predefined-d6986cc7102b-f27c65a3e318-JavaScript-PY-251.23774.444" />
+        <option value="bundled-python-sdk-890ed5b35930-d9c5bdb153f4-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-251.23774.444" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="ba9c56f9-9fae-4e2f-bc58-82725a66fec3" name="Changes" comment="" />
+      <created>1745741449029</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1745741449029</updated>
+      <workItem from="1745981514693" duration="15965000" />
+      <workItem from="1747028945295" duration="7895000" />
+      <workItem from="1747811795914" duration="119000" />
+      <workItem from="1748572877902" duration="1357000" />
+      <workItem from="1776524837111" duration="6418000" />
+      <workItem from="1776613083530" duration="21940000" />
+      <workItem from="1776757199024" duration="6028000" />
+      <workItem from="1776782557748" duration="2538000" />
+      <workItem from="1776816664072" duration="790000" />
+      <workItem from="1776822131119" duration="24588000" />
+      <workItem from="1777098761029" duration="1704000" />
+      <workItem from="1777102338388" duration="26350000" />
+      <workItem from="1777296730598" duration="456000" />
+    </task>
+    <task id="LOCAL-00001" summary="init">
+      <option name="closed" value="true" />
+      <created>1745999085131</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1745999085131</updated>
+    </task>
+    <task id="LOCAL-00002" summary="refactor(genetic-algorithm): 优化遗传算法因子权重优化设计文档和实现&#10;&#10;- 调整了设计文档中的表格格式，统一列宽和对齐方式&#10;- 重构适应度评估器，实现简化版回测用于GA评估&#10;- 添加了带超时和重试的baostock查询功能&#10;- 更新染色体类文档，明确因子权重约束和归一化逻辑&#10;- 修复数据列名引用，使用统一的数据列名常量&#10;- 优化回测引擎中的日期处理和数据加载逻辑&#10;- 完善复合轮动器的数据提供器集成&#10;- 更新指数数据导入计划的文件结构说明">
+      <option name="closed" value="true" />
+      <created>1776999058711</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1776999058711</updated>
+    </task>
+    <task id="LOCAL-00003" summary="docs(specs): 更新每日轮动设计文档并优化缓存策略&#10;&#10;- 添加 cache 目录到 .gitignore&#10;- 重新格式化信号架构文档，增加缩进结构清晰度&#10;- 调整表格对齐格式提升可读性&#10;- 修改市场状态参数配置，降低风险敞口阈值&#10;- 更新参数调整示例数值&#10;- 重构 DailyRotationEngine 数据缓存机制，支持预加载缓存&#10;- 优化回测引擎中指数数据加载逻辑&#10;- 修复基因算法染色体归一化静态方法问题&#10;- 添加 LLM 行为指导原则文档&#10;- 重构复合轮动器继承基类，简化架构&#10;- 更新默认配置参数以适应优化策略&#10;- 优化回测进度显示格式">
+      <option name="closed" value="true" />
+      <created>1777268402350</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1777268402350</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="init" />
+    <MESSAGE value="refactor(genetic-algorithm): 优化遗传算法因子权重优化设计文档和实现&#10;&#10;- 调整了设计文档中的表格格式，统一列宽和对齐方式&#10;- 重构适应度评估器，实现简化版回测用于GA评估&#10;- 添加了带超时和重试的baostock查询功能&#10;- 更新染色体类文档，明确因子权重约束和归一化逻辑&#10;- 修复数据列名引用，使用统一的数据列名常量&#10;- 优化回测引擎中的日期处理和数据加载逻辑&#10;- 完善复合轮动器的数据提供器集成&#10;- 更新指数数据导入计划的文件结构说明" />
+    <MESSAGE value="docs(specs): 更新每日轮动设计文档并优化缓存策略&#10;&#10;- 添加 cache 目录到 .gitignore&#10;- 重新格式化信号架构文档，增加缩进结构清晰度&#10;- 调整表格对齐格式提升可读性&#10;- 修改市场状态参数配置，降低风险敞口阈值&#10;- 更新参数调整示例数值&#10;- 重构 DailyRotationEngine 数据缓存机制，支持预加载缓存&#10;- 优化回测引擎中指数数据加载逻辑&#10;- 修复基因算法染色体归一化静态方法问题&#10;- 添加 LLM 行为指导原则文档&#10;- 重构复合轮动器继承基类，简化架构&#10;- 更新默认配置参数以适应优化策略&#10;- 优化回测进度显示格式" />
+    <option name="LAST_COMMIT_MESSAGE" value="docs(specs): 更新每日轮动设计文档并优化缓存策略&#10;&#10;- 添加 cache 目录到 .gitignore&#10;- 重新格式化信号架构文档，增加缩进结构清晰度&#10;- 调整表格对齐格式提升可读性&#10;- 修改市场状态参数配置，降低风险敞口阈值&#10;- 更新参数调整示例数值&#10;- 重构 DailyRotationEngine 数据缓存机制，支持预加载缓存&#10;- 优化回测引擎中指数数据加载逻辑&#10;- 修复基因算法染色体归一化静态方法问题&#10;- 添加 LLM 行为指导原则文档&#10;- 重构复合轮动器继承基类，简化架构&#10;- 更新默认配置参数以适应优化策略&#10;- 优化回测进度显示格式" />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/main.py</url>
+          <line>15</line>
+          <option name="timeStamp" value="1" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/data_processor/price_calculator.py</url>
+          <line>14</line>
+          <option name="timeStamp" value="7" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
+  </component>
+  <component name="com.intellij.coverage.CoverageDataManagerImpl">
+    <SUITE FILE_PATH="coverage/nj_quant$run_backtest.coverage" NAME="run_backtest Coverage Results" MODIFIED="1776527753792" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/back_testing" />
+    <SUITE FILE_PATH="coverage/nj_quant$run_full_backtest.coverage" NAME="run_full_backtest Coverage Results" MODIFIED="1776530129988" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/back_testing" />
+    <SUITE FILE_PATH="coverage/nj_quant$run_optimization.coverage" NAME="run_optimization Coverage Results" MODIFIED="1776823470674" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/back_testing/optimization" />
+    <SUITE FILE_PATH="coverage/nj_quant$main.coverage" NAME="main Coverage Results" MODIFIED="1746007726253" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/nj_quant$run_composite_backtest.coverage" NAME="run_composite_backtest Coverage Results" MODIFIED="1776672202191" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/back_testing" />
+  </component>
+</project>
