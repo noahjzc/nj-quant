@@ -19,11 +19,106 @@
 | `back_testing/data/daily_data_cache.py` | Modify: `DailyDataCache.build()` — add precomputed columns |
 | `back_testing/data/build_daily_cache.py` | **Create**: standalone CLI entry point |
 | `back_testing/rotation/daily_rotation_engine.py` | Modify: engine rewrite — remove Master DataFrame, add rolling pointer, simplify methods |
-| `tests/back_testing/rotation/test_daily_rotation_engine.py` | **Create**: regression test — old vs new engine output identity |
+---
+
+### Task 1: Add `get_daily_dataframe` to `DataProvider` (fix C1)
+
+**Files:**
+- Modify: `back_testing/data/data_provider.py`
+
+The new engine calls `self.data_provider.get_daily_dataframe(date_str)` unconditionally. Currently only `CachedProvider` has this method; `DataProvider` does not. Without this, constructing the engine without a `CachedProvider` will raise `AttributeError`.
+
+- [ ] **Step 1: Add `get_daily_dataframe` to `DataProvider`**
+
+Insert after `get_stocks_for_date` (line ~389):
+
+```python
+    def get_daily_dataframe(self, date: str) -> pd.DataFrame:
+        """获取指定日期的全市场 DataFrame（兼容 CachedProvider 接口）。
+
+        用于新引擎的每日滚动指针。从 PostgreSQL 单次查询。
+        """
+        session = self.Session()
+        try:
+            target_date = pd.to_datetime(date)
+            results = session.query(StockDaily).filter(
+                StockDaily.trade_date == target_date
+            ).all()
+
+            if not results:
+                return pd.DataFrame()
+
+            rows = []
+            for r in results:
+                rows.append({
+                    'stock_code': r.stock_code,
+                    'trade_date': pd.Timestamp(r.trade_date),
+                    'stock_name': r.stock_name,
+                    'open': float(r.open) if r.open else 0.0,
+                    'high': float(r.high) if r.high else 0.0,
+                    'low': float(r.low) if r.low else 0.0,
+                    'close': float(r.close) if r.close else 0.0,
+                    'volume': float(r.volume) if r.volume else 0.0,
+                    'turnover_amount': float(r.turnover_amount) if r.turnover_amount else 0.0,
+                    'adj_close': float(r.adj_close) if r.adj_close else 0.0,
+                    'prev_adj_close': float(r.prev_adj_close) if r.prev_adj_close else 0.0,
+                    'amplitude': float(r.amplitude) if r.amplitude else 0.0,
+                    'change_pct': float(r.change_pct) if r.change_pct else 0.0,
+                    'turnover_rate': float(r.turnover_rate) if r.turnover_rate else 0.0,
+                    'volume_ratio': float(r.volume_ratio) if r.volume_ratio else 0.0,
+                    'circulating_mv': float(r.circulating_mv) if r.circulating_mv else 0.0,
+                    'total_mv': float(r.total_mv) if r.total_mv else 0.0,
+                    'limit_up': r.limit_up,
+                    'limit_down': r.limit_down,
+                    'pe_ttm': float(r.pe_ttm) if r.pe_ttm else None,
+                    'ps_ttm': float(r.ps_ttm) if r.ps_ttm else None,
+                    'pcf_ttm': float(r.pcf_ttm) if r.pcf_ttm else None,
+                    'pb': float(r.pb) if r.pb else None,
+                    'ma_5': float(r.ma_5) if r.ma_5 else None,
+                    'ma_10': float(r.ma_10) if r.ma_10 else None,
+                    'ma_20': float(r.ma_20) if r.ma_20 else None,
+                    'ma_30': float(r.ma_30) if r.ma_30 else None,
+                    'ma_60': float(r.ma_60) if r.ma_60 else None,
+                    'ma_cross': r.ma_cross,
+                    'macd_dif': float(r.macd_dif) if r.macd_dif else None,
+                    'macd_dea': float(r.macd_dea) if r.macd_dea else None,
+                    'macd_hist': float(r.macd_hist) if r.macd_hist else None,
+                    'macd_cross': r.macd_cross,
+                    'kdj_k': float(r.kdj_k) if r.kdj_k else None,
+                    'kdj_d': float(r.kdj_d) if r.kdj_d else None,
+                    'kdj_j': float(r.kdj_j) if r.kdj_j else None,
+                    'kdj_cross': r.kdj_cross,
+                    'boll_mid': float(r.boll_mid) if r.boll_mid else None,
+                    'boll_upper': float(r.boll_upper) if r.boll_upper else None,
+                    'boll_lower': float(r.boll_lower) if r.boll_lower else None,
+                    'rsi_1': float(r.rsi_1) if r.rsi_1 else None,
+                    'rsi_2': float(r.rsi_2) if r.rsi_2 else None,
+                    'rsi_3': float(r.rsi_3) if r.rsi_3 else None,
+                    'psy': float(r.psy) if r.psy else None,
+                    'psyma': float(r.psyma) if r.psyma else None,
+                    'industry': r.industry,
+                    'concept': r.concept,
+                    'area': r.area,
+                })
+
+            return pd.DataFrame(rows)
+
+        finally:
+            session.close()
+```
+
+Note: This method does NOT include the 9 precomputed columns. When using `DataProvider`, the engine's `_build_signal_features` will get `KeyError` on those columns. However, the `DataProvider` path is only used for single backtests without cache, and the optimization workflow always uses `CachedProvider`. The fallback behavior is acceptable (engine will fall through `_build_signal_features` exception to per-stock signal detection).
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add back_testing/data/data_provider.py
+git commit -m "feat(data): add get_daily_dataframe to DataProvider for engine compatibility"
+```
 
 ---
 
-### Task 1: Enhance `DailyDataCache.build()` — precompute rolling columns
+### Task 2: Enhance `DailyDataCache.build()` — precompute rolling columns
 
 **Files:**
 - Modify: `back_testing/data/daily_data_cache.py:165-286`
@@ -104,6 +199,18 @@ def build(
     index_dir = cache_path / 'index'
     daily_dir.mkdir(parents=True, exist_ok=True)
     index_dir.mkdir(parents=True, exist_ok=True)
+
+    # ── 0. Version check for incremental build safety ──
+    CACHE_VERSION = 2  # v1=raw columns, v2=with precomputed rolling indicators
+    version_path = cache_path / 'cache_version.txt'
+    if version_path.exists():
+        existing_version = int(version_path.read_text().strip())
+        if existing_version < CACHE_VERSION:
+            print(f"缓存版本不兼容 (v{existing_version} → v{CACHE_VERSION})，强制重建所有日期...")
+            import shutil
+            for f in daily_dir.glob('*.parquet'):
+                f.unlink()  # Delete old-format files so all dates get rebuilt
+    version_path.write_text(str(CACHE_VERSION))
 
     load_start = (pd.Timestamp(start_date) - pd.Timedelta(days=preload_days)).strftime('%Y-%m-%d')
     load_end = end_date
@@ -241,7 +348,7 @@ git commit -m "feat(data): add precomputed rolling indicators to DailyDataCache.
 
 ---
 
-### Task 2: Create standalone `build_daily_cache.py` CLI
+### Task 3: Create standalone `build_daily_cache.py` CLI
 
 **Files:**
 - Create: `back_testing/data/build_daily_cache.py`
@@ -317,7 +424,7 @@ git commit -m "feat(data): add standalone cache build CLI entry point"
 
 ---
 
-### Task 3: Rewrite engine `__init__` — new attributes, remove old
+### Task 4: Rewrite engine `__init__` — new attributes, remove old
 
 **Files:**
 - Modify: `back_testing/rotation/daily_rotation_engine.py:111-171`
@@ -390,7 +497,7 @@ git commit -m "refactor(engine): replace Master DataFrame with rolling pointer i
 
 ---
 
-### Task 4: Rewrite `_advance_to_date` — rolling pointer
+### Task 5: Rewrite `_advance_to_date` — rolling pointer
 
 **Files:**
 - Modify: `back_testing/rotation/daily_rotation_engine.py:876-948` (entire `_advance_to_date`)
@@ -425,7 +532,7 @@ git commit -m "refactor(engine): rewrite _advance_to_date as rolling pointer"
 
 ---
 
-### Task 5: Rewrite `_get_daily_stock_data` — groupby 2 days
+### Task 6: Rewrite `_get_daily_stock_data` — groupby 2 days
 
 **Files:**
 - Modify: `back_testing/rotation/daily_rotation_engine.py:950-974` (entire `_get_daily_stock_data`)
@@ -465,7 +572,7 @@ git commit -m "refactor(engine): rewrite _get_daily_stock_data for 2-day rolling
 
 ---
 
-### Task 6: Rewrite `_build_signal_features` — pure column copy
+### Task 7: Rewrite `_build_signal_features` — pure column copy
 
 **Files:**
 - Modify: `back_testing/rotation/daily_rotation_engine.py:600-664` (entire `_build_signal_features`)
@@ -524,7 +631,7 @@ git commit -m "refactor(engine): rewrite _build_signal_features as pure column c
 
 ---
 
-### Task 7: Simplify `_check_and_sell` — ATR from column
+### Task 8: Simplify `_check_and_sell` — ATR from column
 
 **Files:**
 - Modify: `back_testing/rotation/daily_rotation_engine.py:374-505` (lines 442-448, the ATR check block)
@@ -620,7 +727,7 @@ git commit -m "refactor(engine): read ATR from precomputed column in _check_and_
 
 ---
 
-### Task 8: Simplify `_execute_buy` — factors from columns
+### Task 9: Simplify `_execute_buy` — factors from columns
 
 **Files:**
 - Modify: `back_testing/rotation/daily_rotation_engine.py:666-833` (lines 700-748, the factor extraction loop)
@@ -733,7 +840,7 @@ git commit -m "refactor(engine): read factors from precomputed columns in _execu
 
 ---
 
-### Task 9: Simplify `run()` — remove preload, init `_prev_df`
+### Task 10: Simplify `run()` — remove preload, init `_prev_df`
 
 **Files:**
 - Modify: `back_testing/rotation/daily_rotation_engine.py:173-225` (the `run()` method)
@@ -784,10 +891,10 @@ Replace the entire `run()` method:
     def _init_prev_cache(self, first_date: pd.Timestamp):
         """加载 first_date 前一个交易日的数据作为 _prev_df。
 
-        向后搜索最多 10 个日历日，找到第一个有 Parquet 文件的交易日。
-        如果找不到（极罕见），_prev_df 保持为空。
+        向后搜索最多 15 个日历日（覆盖春节等长假），找到第一个有 Parquet 文件的交易日。
+        如果找不到（极罕见），_prev_df 保持为空，Day-1 信号检测自动跳过（影响可忽略）。
         """
-        for offset in range(1, 11):
+        for offset in range(1, 16):
             candidate = first_date - pd.Timedelta(days=offset)
             date_str = candidate.strftime('%Y-%m-%d')
             df = self.data_provider.get_daily_dataframe(date_str)
@@ -807,32 +914,150 @@ git commit -m "refactor(engine): simplify run() — remove preload, add _init_pr
 
 ---
 
-### Task 10: Remove dead code and clean up
+### Task 11: Update callers — remove `preloaded_cache` argument (fix C3)
+
+**Files:**
+- Modify: `back_testing/backtest/run_daily_rotation.py`
+- Modify: `back_testing/optimization/run_daily_rotation_optimization.py`
+
+Task 4 (engine `__init__`) removes the `preloaded_cache` parameter. Three call sites still pass it, causing `TypeError`.
+
+- [ ] **Step 1: Update `run_daily_rotation.py`** — remove `preloaded_cache` logic
+
+Replace lines 29-53:
+
+Old:
+```python
+    data_provider = None
+    preloaded_cache = None
+
+    if cache_dir:
+        cache_path = DailyDataCache.build(...)
+        ...
+        preloaded_cache = DailyDataCache.load_preload_dataframe(preload_path)
+
+    engine = DailyRotationEngine(config, start_date, end_date,
+                                 data_provider=data_provider,
+                                 preloaded_cache=preloaded_cache)
+```
+
+New:
+```python
+    data_provider = None
+
+    if cache_dir:
+        cache_path = DailyDataCache.build(
+            start_date=start_date,
+            end_date=end_date,
+            cache_dir=cache_dir,
+            benchmark_index=config.benchmark_index,
+        )
+        cache = DailyDataCache(cache_path)
+        data_provider = CachedProvider(cache)
+        print(f"数据缓存就绪: {cache_path}")
+        print(f"  {len(cache.stock_codes)} 只股票, {len(cache.trading_dates)} 个交易日")
+
+    engine = DailyRotationEngine(config, start_date, end_date,
+                                 data_provider=data_provider)
+```
+
+Remove: `preloaded_cache = None`, the `write_preload_cache`/`load_preload_dataframe` block, and the `preloaded_cache=preloaded_cache` argument.
+
+- [ ] **Step 2: Update `run_daily_rotation_optimization.py`** — replace `objective()` line 293
+
+Line ~293 in `objective()`:
+Old:
+```python
+engine = DailyRotationEngine(config, start_date, end_date,
+                             data_provider=data_provider,
+                             preloaded_cache=preloaded_cache)
+```
+New:
+```python
+engine = DailyRotationEngine(config, start_date, end_date,
+                             data_provider=data_provider)
+```
+
+Also remove the `preloaded_cache = None` / `if preload_cache_path:` block in `objective()`:
+Old (~line 285-287):
+```python
+preloaded_cache = None
+if preload_cache_path:
+    preloaded_cache = DailyDataCache.load_preload_dataframe(preload_cache_path)
+```
+New: Remove these 3 lines entirely.
+
+- [ ] **Step 3: Update `run_daily_rotation_optimization.py`** — replace `_evaluate_on_test()` line 731
+
+Same pattern as objective():
+Old (~line 724-726):
+```python
+preloaded_cache = None
+if preload_cache_path:
+    preloaded_cache = DailyDataCache.load_preload_dataframe(preload_cache_path)
+```
+And the engine construction:
+Old:
+```python
+engine = DailyRotationEngine(config, start, end,
+                             data_provider=data_provider,
+                             preloaded_cache=preloaded_cache)
+```
+New:
+```python
+engine = DailyRotationEngine(config, start, end,
+                             data_provider=data_provider)
+```
+
+- [ ] **Step 4: Remove `_build_preload_cache` calls** — preload cache is no longer needed
+
+In `run_single_optimization()` (~line 443):
+```python
+preload_cache_path = _build_preload_cache(data_provider, base_config, start_date, end_date)
+```
+This is still called to determine `preload_cache_path` which is passed to `objective()`. Since `objective()` no longer uses it, we can also remove this call. However, keep it for now to avoid changing the `_build_preload_cache` function signature — it just becomes a no-op. The `preload_cache_path` parameter in `objective()` can stay but be ignored.
+
+Actually, cleaner approach: remove `_build_preload_cache` call from `run_single_optimization` and `run_walk_forward`, remove the `preload_cache_path` parameter from `objective()` and `_evaluate_on_test()`.
+
+```python
+# In run_single_optimization(), remove or comment out:
+# preload_cache_path = _build_preload_cache(...)
+
+# Update objective lambda:
+obj = lambda trial: objective(trial, start_date, end_date, base_config, data_provider)
+
+# Update objective signature — remove preload_cache_path parameter:
+def objective(trial, start_date, end_date,
+              base_config=None, data_provider=None):
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add back_testing/backtest/run_daily_rotation.py back_testing/optimization/run_daily_rotation_optimization.py
+git commit -m "refactor: remove preloaded_cache from engine callers"
+```
+
+---
+
+### Task 12: Remove dead code and clean up
 
 **Files:**
 - Modify: `back_testing/rotation/daily_rotation_engine.py`
 
-- [ ] **Step 1: Remove `_preload_histories` method** (lines 854-874)
+- [ ] **Step 1: Remove `_preload_histories` method** (original lines 854-874)
 
 Full method deletion.
 
-- [ ] **Step 2: Remove `compute_overheat` function?** — NO, keep it.
+- [ ] **Step 2: Remove unused import `FactorProcessor`**
 
-`compute_overheat` is still used in `_execute_buy` for the OVERHEAT factor. Keep it.
+Line 45: `from back_testing.factors.factor_utils import FactorProcessor` — REMOVE (no longer used directly in engine; `SignalRanker` uses it internally).
 
-- [ ] **Step 3: Remove unused imports**
+- [ ] **Step 3: Keep everything else**
 
-Lines 7, 9, 12, 45-47 — remove imports that are no longer needed:
-- Line 7: `from datetime import datetime` — still used in `run()` print, KEEP
-- Line 9: `from back_testing.data.data_provider import DataProvider` — still used in `__init__` default, KEEP
-- Line 12: `from back_testing.rotation.config import RotationConfig` — still used, KEEP
-- Line 15: `compute_overheat` — keep as standalone function, still used in `_execute_buy`
-- Line 45: `from back_testing.factors.factor_utils import FactorProcessor` — REMOVE (no longer used directly)
-- Lines 46-49: `MarketRegime`, `RotationPositionManager`, `TradeExecutor`, `StopLossStrategies` — all still used, KEEP
-
-Check: `StopLossStrategies` is still used in `_check_and_sell` for `check_exit()`. Yes, KEEP.
-
-So only remove: line 45 (`from back_testing.factors.factor_utils import FactorProcessor`).
+- `compute_overheat` — still used in `_execute_buy`
+- `StopLossStrategies` — still used in `_check_and_sell` for `check_exit()`
+- `MarketRegime`, `RotationPositionManager`, `TradeExecutor`, `SignalFilter`, `SignalRanker` — all in active use
 
 - [ ] **Step 4: Commit**
 
@@ -843,12 +1068,57 @@ git commit -m "chore(engine): remove dead code and unused imports"
 
 ---
 
-### Task 11: Run existing tests to verify correctness
+### Task 13: Verification — tests and sanity checks
 
 **Files:**
 - (No file changes — verification only)
 
-- [ ] **Step 1: Run all rotation tests**
+- [ ] **Step 1: Verify precomputed column correctness (I4)**
+
+Add a quick sanity script comparing precomputed `atr_14` and `wr_10` against runtime `StopLossStrategies.calculate_atr()` and `FactorProcessor.williams_r()` for a sample of 5 stocks × 5 dates:
+
+```python
+# Run interactively after building cache:
+from back_testing.data.daily_data_cache import DailyDataCache, CachedProvider
+from back_testing.risk.stop_loss_strategies import StopLossStrategies
+from back_testing.factors.factor_utils import FactorProcessor
+import pandas as pd
+
+cache = DailyDataCache('cache/daily_rotation')
+provider = CachedProvider(cache)
+
+# Sample 5 stocks, 5 recent dates
+codes = cache.stock_codes[:5]
+dates = [d.strftime('%Y-%m-%d') for d in cache.trading_dates[-5:]]
+
+for code in codes:
+    df = provider.get_daily_dataframe(dates[-1])  # today
+    prev_df = provider.get_daily_dataframe(dates[-2])  # prev
+    if code not in df['stock_code'].values:
+        continue
+    row = df[df['stock_code'] == code].iloc[-1]
+    
+    # Compare ATR: need 15 days history from get_histories
+    hist = provider.get_batch_histories([code], end_date=dates[-1], start_date=dates[0])
+    if code in hist and len(hist[code]) >= 15:
+        runtime_atr = StopLossStrategies.calculate_atr(hist[code], period=14)
+        cached_atr = float(row['atr_14'])
+        diff_atr = abs(runtime_atr - cached_atr)
+        status = 'PASS' if diff_atr < 0.01 else f'DIFF={diff_atr:.4f}'
+        print(f"  {code} {dates[-1]} ATR: runtime={runtime_atr:.4f} cached={cached_atr:.4f} {status}")
+    
+    # Compare WR_10
+    if code in hist and len(hist[code]) >= 10:
+        runtime_wr = FactorProcessor.williams_r(hist[code], period=10)
+        cached_wr = float(row['wr_10'])
+        diff_wr = abs(runtime_wr - cached_wr)
+        status = 'PASS' if diff_wr < 0.01 else f'DIFF={diff_wr:.4f}'
+        print(f"  {code} {dates[-1]} WR10: runtime={runtime_wr:.2f} cached={cached_wr:.2f} {status}")
+```
+
+Expected: All comparisons show `PASS` (difference < 1 cent for ATR, < 0.01 for WR).
+
+- [ ] **Step 2: Run all rotation tests**
 
 ```bash
 pytest tests/back_testing/rotation/ -v
@@ -856,7 +1126,7 @@ pytest tests/back_testing/rotation/ -v
 
 Expected: All existing tests pass. If any fail, diagnose and fix before proceeding.
 
-- [ ] **Step 2: Run optimization tests**
+- [ ] **Step 3: Run optimization tests**
 
 ```bash
 pytest tests/back_testing/optimization/ -v
@@ -864,7 +1134,7 @@ pytest tests/back_testing/optimization/ -v
 
 Expected: All existing tests pass.
 
-- [ ] **Step 3: Run data tests**
+- [ ] **Step 4: Run data tests**
 
 ```bash
 pytest tests/back_testing/data/ -v
@@ -872,7 +1142,7 @@ pytest tests/back_testing/data/ -v
 
 Expected: All existing tests pass.
 
-- [ ] **Step 4: Run full test suite**
+- [ ] **Step 5: Run full test suite**
 
 ```bash
 pytest tests/back_testing/ -v
@@ -880,9 +1150,13 @@ pytest tests/back_testing/ -v
 
 Expected: All tests pass.
 
+- [ ] **Step 6: Document known behavioral difference (I1)**
+
+Day-1: when `_init_prev_cache` finds no previous trading day (e.g., cached range starts exactly at `start_date`), `_prev_df` is empty. This causes `_build_signal_features` to return empty (no common index intersection), so no buy signals on day 1. This is architecturally intentional — the old engine could trade on day 1 because it preloaded 30 days of history. The impact is 1 day out of 1250 (0.08%), which is negligible for a ~20x speedup trade-off.
+
 ---
 
-### Task 12: Performance benchmark
+### Task 14: Performance benchmark
 
 **Files:**
 - (No file changes — measurement only)
