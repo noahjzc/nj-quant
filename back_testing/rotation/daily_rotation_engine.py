@@ -116,35 +116,31 @@ class DailyRotationEngine:
         self._today_df: pd.DataFrame = pd.DataFrame()
 
     def run(self) -> List[DailyResult]:
-        """运行回测"""
+        """Run the backtest main loop.
+
+        Flow:
+        1. Get trading dates from benchmark index.
+        2. Initialize _prev_df from the trading day before first_date.
+        3. For each date: advance data pointer → run single day logic → record results.
+        """
         dates = self._get_trading_dates()
         n_dates = len(dates)
         if n_dates < 2:
             return []
 
-        # 一次性加载全市场历史数据（避免每日N+1查询）
-        if self._preloaded_cache is not None:
-            if isinstance(self._preloaded_cache, pd.DataFrame):
-                self._cache_df = self._preloaded_cache
-            else:
-                # dict 格式 → master DataFrame
-                frames = [df for df in self._preloaded_cache.values() if not df.empty]
-                self._cache_df = pd.concat(frames) if frames else pd.DataFrame()
-            self._preloaded_cache = None  # 释放引用
-        else:
-            self._preload_histories(dates[0])
+        # Initialize _prev_df: load trading day just before first_date
+        self._init_prev_cache(dates[0])
 
         now = datetime.now
-        n_codes = self._cache_df['stock_code'].nunique() if not self._cache_df.empty else 0
-        print(f"{now():%H:%M:%S} [DailyRotation] {self.start_date} ~ {self.end_date}, {n_dates}天, {n_codes}只")
+        print(f"{now():%H:%M:%S} [DailyRotation] {self.start_date} ~ {self.end_date}, {n_dates}天")
 
+        # ── Day-by-day loop ──
         for i, date in enumerate(dates):
             date_str = date.strftime('%Y-%m-%d')
             if i == 0 or (i + 1) % 10 == 0:
                 prev_asset = self.daily_results[-1].total_asset if self.daily_results else self.config.initial_capital
                 print(f"{now():%H:%M:%S}   [{i+1}/{n_dates}] {date_str} | 持仓:{len(self.positions)} | 资产:{prev_asset:,.0f}")
 
-            # 推进到当日：追加当日全市场数据到 master DataFrame（1 次 concat）
             self._advance_to_date(date)
             result = self._run_single_day(date)
             self.daily_results.append(result)
@@ -606,6 +602,22 @@ class DailyRotationEngine:
 
         dates = sorted(index_df.index.unique())
         return [pd.Timestamp(d) for d in dates]
+
+    def _init_prev_cache(self, first_date: pd.Timestamp):
+        """加载 first_date 前一个交易日的数据作为 _prev_df。
+
+        向后搜索最多 15 个日历日（覆盖春节等长假），找到第一个有 Parquet 文件的交易日。
+        如果找不到（极罕见），_prev_df 保持为空，Day-1 信号检测自动跳过（影响可忽略）。
+        """
+        for offset in range(1, 16):
+            candidate = first_date - pd.Timedelta(days=offset)
+            date_str = candidate.strftime('%Y-%m-%d')
+            df = self.data_provider.get_daily_dataframe(date_str)
+            if df is not None and not df.empty:
+                df = df.copy()
+                df['trade_date'] = candidate
+                self._prev_df = df.set_index('trade_date')
+                return
 
     def _preload_histories(self, first_date: pd.Timestamp):
         """预加载初始窗口：回测首日前30个日历日的数据 → master DataFrame"""
