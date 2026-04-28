@@ -660,18 +660,24 @@ class DailyRotationEngine:
         self._today_df = day_df.set_index('trade_date')
 
     def _get_daily_stock_data(self, date: pd.Timestamp) -> Dict[str, pd.DataFrame]:
-        """从 master DataFrame 中提取当日活跃股票的滚动数据（≥20 个交易日）"""
-        if self._cache_df.empty:
+        """拼接 _prev_df + _today_df (~9500 行)，按股票分组为 {code: 2-row DataFrame}。
+
+        每个 stock DataFrame 包含 1-2 行（前日+当日），index=trade_date。
+        预计算列已在 Parquet 中，无需历史窗口检查。
+        """
+        if self._today_df.empty:
             return {}
 
-        # 裁剪到当前日期
-        window = self._cache_df[self._cache_df.index <= date]
-        if window.empty:
+        # Concatenate prev + today (~9500 rows total for all stocks)
+        frames = [self._prev_df, self._today_df]
+        combined = pd.concat(frames)
+
+        if combined.empty:
             return {}
 
         result = {}
-        for code, group in window.groupby('stock_code', sort=False):
-            if len(group) >= self.MIN_TRADING_DAYS and date in group.index:
+        for code, group in combined.groupby('stock_code', sort=False):
+            if date in group.index:
                 result[code] = group
         return result
 
