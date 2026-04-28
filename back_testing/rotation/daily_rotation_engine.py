@@ -428,54 +428,45 @@ class DailyRotationEngine:
         return combined[combined].index.tolist()
 
     def _build_signal_features(self, stock_codes: List[str]) -> pd.DataFrame:
-        """从 master 缓存构建信号特征矩阵（只取每只股票最近 21 行，避免对全量历史做 transform）"""
-        mask = self._cache_df['stock_code'].isin(stock_codes)
-        hist = self._cache_df[mask]
+        """从 _today_df / _prev_df 直接提取预计算列，组装特征矩阵。
 
-        if hist.empty:
+        零 groupby，零 rolling，零 sort_values。
+        所有技术指标已在缓存构建时预计算好。
+        """
+        if self._today_df.empty:
             return pd.DataFrame()
 
-        # 按 (stock_code, trade_date) 排序
-        hist = hist.sort_values(['stock_code', self._cache_df.index.name])
+        # Filter to relevant stocks
+        today = self._today_df[self._today_df['stock_code'].isin(stock_codes)]
+        prev = self._prev_df[self._prev_df['stock_code'].isin(stock_codes)]
 
-        # 每只股票只保留最近 21 行（20 日窗口 + 1 行 prev），大幅压缩 transform 数据量
-        hist = hist.groupby('stock_code', sort=False).tail(21)
+        if today.empty:
+            return pd.DataFrame()
 
-        # 在压缩后的副本上一次性计算所有滚动列
-        hist = hist.copy()
-        g = hist.groupby('stock_code', sort=False)
-        hist['vol_ma5'] = g['volume'].rolling(5, min_periods=1).mean().values
-        hist['vol_ma20'] = g['volume'].rolling(20, min_periods=5).mean().values
-        hist['close_std_20'] = g['close'].rolling(20, min_periods=5).std().values
-        hist['high_20_max'] = g['high'].shift(1).rolling(20, min_periods=1).max().values
+        today = today.set_index('stock_code')
+        prev = prev.set_index('stock_code')
 
-        # 提取每只股票的最新和上一行
-        g2 = hist.groupby('stock_code', sort=False)
-        latest = g2.last().copy()           # index = stock_code
-        prev = g2.nth(-2).copy()            # index = trade_date (original), 需对齐
-        prev.index = prev['stock_code']     # 对齐到 stock_code（每组唯一）
+        # Only keep stocks present in both days (needed for cross detection)
+        common = today.index.intersection(prev.index)
+        if common.empty:
+            return pd.DataFrame()
 
-        # 填充缺失值（新股可能 history 不足）
-        cols = ['vol_ma5', 'vol_ma20', 'close_std_20', 'high_20_max']
-        for c in cols:
-            if c in latest.columns:
-                latest[c] = latest[c].fillna(0)
-            if c in prev.columns:
-                prev[c] = prev[c].fillna(0)
+        t = today.loc[common]
+        p = prev.loc[common]
 
         return pd.DataFrame({
-            'kdj_k': latest['kdj_k'], 'kdj_d': latest['kdj_d'],
-            'kdj_k_p': prev['kdj_k'], 'kdj_d_p': prev['kdj_d'],
-            'macd_dif': latest['macd_dif'], 'macd_dea': latest['macd_dea'],
-            'macd_dif_p': prev['macd_dif'], 'macd_dea_p': prev['macd_dea'],
-            'ma_5': latest['ma_5'], 'ma_20': latest['ma_20'],
-            'ma_5_p': prev['ma_5'], 'ma_20_p': prev['ma_20'],
-            'vol_ma5': latest['vol_ma5'], 'vol_ma20': latest['vol_ma20'],
-            'vol_ma5_p': prev['vol_ma5'], 'vol_ma20_p': prev['vol_ma20'],
-            'close': latest['close'], 'close_std_20': latest['close_std_20'],
-            'boll_mid': latest['boll_mid'], 'high_20_max': latest['high_20_max'],
-            'psy': latest['psy'], 'psyma': latest['psyma'],
-        }, index=latest.index)
+            'kdj_k': t['kdj_k'], 'kdj_d': t['kdj_d'],
+            'kdj_k_p': p['kdj_k'], 'kdj_d_p': p['kdj_d'],
+            'macd_dif': t['macd_dif'], 'macd_dea': t['macd_dea'],
+            'macd_dif_p': p['macd_dif'], 'macd_dea_p': p['macd_dea'],
+            'ma_5': t['ma_5'], 'ma_20': t['ma_20'],
+            'ma_5_p': p['ma_5'], 'ma_20_p': p['ma_20'],
+            'vol_ma5': t['vol_ma5'], 'vol_ma20': t['vol_ma20'],
+            'vol_ma5_p': p['vol_ma5'], 'vol_ma20_p': p['vol_ma20'],
+            'close': t['close'], 'close_std_20': t['close_std_20'],
+            'boll_mid': t['boll_mid'], 'high_20_max': t['high_20_max'],
+            'psy': t['psy'], 'psyma': t['psyma'],
+        }, index=common)
 
     def _execute_buy(
         self,
