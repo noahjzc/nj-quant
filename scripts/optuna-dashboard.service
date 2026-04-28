@@ -4,9 +4,9 @@ After=network.target
 
 [Service]
 Type=simple
-User=你的用户名
-WorkingDirectory=/home/你的用户名/nj-quant
-ExecStart=/home/你的用户名/nj-quant/.venv/bin/optuna-dashboard sqlite:///home/你的用户名/nj-quant/optuna.db --host 0.0.0.0 --port 8080
+User=root
+WorkingDirectory=/workspace/code/nj-quant
+ExecStart=/workspace/code/nj-quant/.venv/bin/optuna-dashboard sqlite:///workspace/code/nj-quant/optuna.db --host 0.0.0.0 --port 8080
 Restart=always
 RestartSec=10
 

@@ -170,19 +170,25 @@ class DailyDataCache:
         preload_days: int = 30,
         benchmark_index: str = 'sh000300'
     ):
-        """从数据库一次性加载全量数据，写入 Parquet 缓存。
+        """从数据库按日分批加载，写入 Parquet 缓存。
+
+        每日期数据单独查询（最多 ~5000 行），写入后立即释放内存，
+        避免一次性加载全量数据导致 OOM。
+
+        已存在的 daily 文件自动跳过（增量构建），不同日期范围的回测
+        可复用同一缓存目录。
 
         Args:
             start_date: 回测开始日期
             end_date: 回测结束日期
-            cache_dir: 缓存根目录
+            cache_dir: 缓存根目录（平坦结构，daily 文件直接写入 {cache_dir}/daily/）
             preload_days: 预加载天数（用于引擎的 _preload_histories）
             benchmark_index: 基准指数代码
         """
         from back_testing.data.db.connection import get_engine
 
         engine = get_engine()
-        cache_path = Path(cache_dir) / f'{start_date}_{end_date}'
+        cache_path = Path(cache_dir)
         daily_dir = cache_path / 'daily'
         index_dir = cache_path / 'index'
         daily_dir.mkdir(parents=True, exist_ok=True)
@@ -192,52 +198,70 @@ class DailyDataCache:
         load_start = (pd.Timestamp(start_date) - pd.Timedelta(days=preload_days)).strftime('%Y-%m-%d')
         load_end = end_date
 
-        # ── 1. 股票代码 ──
-        logger.info("加载股票代码...")
+        # ── 1. 查询交易日列表 ──
+        dates_df = pd.read_sql(
+            "SELECT DISTINCT trade_date FROM stock_daily "
+            "WHERE trade_date >= %(start)s AND trade_date <= %(end)s "
+            "ORDER BY trade_date",
+            engine,
+            params={'start': load_start, 'end': load_end}
+        )
+        dates = [d.strftime('%Y-%m-%d') for d in pd.to_datetime(dates_df['trade_date'])]
+        if not dates:
+            raise ValueError(f"指定范围内无交易日数据: {load_start} ~ {load_end}")
+
+        print(f"缓存构建: {load_start} ~ {load_end}, 共 {len(dates)} 个交易日")
+
+        # ── 2. 逐日查询 + 写入 + 释放 ──
+        new_count = 0
+        skip_count = 0
+
+        for i, date_str in enumerate(dates):
+            daily_path = daily_dir / f'{date_str}.parquet'
+            if daily_path.exists():
+                skip_count += 1
+                continue
+
+            df = pd.read_sql(
+                "SELECT * FROM stock_daily WHERE trade_date = %(date)s",
+                engine,
+                params={'date': date_str}
+            )
+            # 将 Numeric → float，避免 Parquet 写入 Decimal 报错
+            for col in df.columns:
+                if col == 'trade_date':
+                    continue
+                if df[col].dtype == object:
+                    try:
+                        df[col] = pd.to_numeric(df[col])
+                    except (ValueError, TypeError):
+                        pass
+
+            df['trade_date'] = pd.to_datetime(df['trade_date'])
+            df.to_parquet(daily_path, index=False)
+            new_count += 1
+
+            if (i + 1) % 10 == 0 or i == len(dates) - 1:
+                print(f"  [{i + 1}/{len(dates)}] {date_str}: {len(df)} 只股票")
+
+        print(f"日线数据写入完成: {new_count} 新增, {skip_count} 跳过")
+
+        # ── 3. 股票代码 ──
         codes_df = pd.read_sql(
             "SELECT stock_code FROM stock_meta WHERE is_active = TRUE AND market != '北'",
             engine
         )
         codes_df.to_parquet(cache_path / 'stock_codes.parquet', index=False)
-        all_codes = codes_df['stock_code'].tolist()
-        logger.info(f"  共 {len(all_codes)} 只")
+        print(f"股票代码: {len(codes_df)} 只")
 
-        # ── 2. 日线数据（一次性查询全量） ──
-        logger.info(f"加载日线数据: {load_start} ~ {load_end} ...")
-        daily_df = pd.read_sql(
-            "SELECT * FROM stock_daily WHERE trade_date >= %(start)s AND trade_date <= %(end)s",
-            engine,
-            params={'start': load_start, 'end': load_end}
-        )
-        # 将 Numeric → float，避免 Parquet 写入 Decimal 报错
-        for col in daily_df.columns:
-            if col == 'trade_date':
-                continue
-            if daily_df[col].dtype == object:
-                try:
-                    daily_df[col] = pd.to_numeric(daily_df[col])
-                except (ValueError, TypeError):
-                    pass
-
-        # 转换日期列
-        daily_df['trade_date'] = pd.to_datetime(daily_df['trade_date'])
-
-        # 按日期分组写入（保留 trade_date 列，get_histories 等需要用它做 index）
-        date_groups = daily_df.groupby(daily_df['trade_date'].dt.strftime('%Y-%m-%d'))
-        file_count = 0
-        for date_str, group in date_groups:
-            group.to_parquet(daily_dir / f'{date_str}.parquet', index=False)
-            file_count += 1
-        logger.info(f"  写入 {file_count} 个日文件")
-
-        # ── 3. 交易日列表（从日线数据推导） ──
-        trading_dates = sorted(daily_df['trade_date'].dt.strftime('%Y-%m-%d').unique())
-        pd.DataFrame({'trade_date': trading_dates}).to_parquet(
+        # ── 4. 交易日列表（从所有已缓存的 daily 文件收集） ──
+        all_cached_dates = sorted([f.stem for f in daily_dir.glob('*.parquet')])
+        pd.DataFrame({'trade_date': all_cached_dates}).to_parquet(
             cache_path / 'trading_dates.parquet', index=False
         )
 
-        # ── 4. 指数数据 ──
-        logger.info(f"加载指数数据: {benchmark_index} ...")
+        # ── 5. 指数数据（数据量小，单次查询） ──
+        print(f"加载指数数据: {benchmark_index} ...")
         index_df = pd.read_sql(
             "SELECT * FROM index_daily WHERE index_code = %(code)s "
             "AND trade_date >= %(start)s AND trade_date <= %(end)s",
@@ -256,9 +280,9 @@ class DailyDataCache:
         index_df['trade_date'] = pd.to_datetime(index_df['trade_date'])
         index_df = index_df.set_index('trade_date').sort_index()
         index_df.to_parquet(index_dir / f'{benchmark_index}.parquet')
-        logger.info(f"  共 {len(index_df)} 条")
+        print(f"指数数据: {len(index_df)} 条")
 
-        logger.info(f"缓存构建完成: {cache_path}")
+        print(f"缓存构建完成: {cache_path}")
         return str(cache_path)
 
 
