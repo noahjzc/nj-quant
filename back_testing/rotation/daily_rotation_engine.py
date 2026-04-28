@@ -69,18 +69,23 @@ class DailyRotationEngine:
     6. 记录每日净值和交易
     """
 
-    PRELOAD_DAYS = 30
-    MIN_TRADING_DAYS = 20
-
     def __init__(self, config: RotationConfig, start_date: str, end_date: str,
-                 data_provider=None, preloaded_cache=None):
-        """preloaded_cache: Dict[str, DataFrame] 或 master DataFrame，均可"""
+                 data_provider=None):
+        """Initialize engine with rolling pointer data model.
+
+        Args:
+            config: Strategy configuration.
+            start_date / end_date: Backtest date range (YYYY-MM-DD).
+            data_provider: Data source (CachedProvider with precomputed columns required).
+        """
         self.config = config
         self.start_date = start_date
         self.end_date = end_date
 
+        # ── Data source ──
         self.data_provider = data_provider or DataProvider()
-        self._preloaded_cache = preloaded_cache
+
+        # ── Subsystems ──
         self.position_manager = RotationPositionManager(
             total_capital=config.initial_capital,
             max_total_pct=config.max_total_pct,
@@ -90,26 +95,25 @@ class DailyRotationEngine:
         self.buy_filter = SignalFilter(config.buy_signal_types, mode=config.buy_signal_mode,
                                         kdj_low_threshold=config.kdj_low_threshold)
         self.sell_filter = SignalFilter(config.sell_signal_types)
-        # ATR 止损止盈参数
+        self.ranker = SignalRanker(config.rank_factor_weights, config.rank_factor_directions)
+        self.market_regime = MarketRegime(config.market_regime, self.data_provider)
+
+        # ── ATR stop parameters ──
         self.atr_period = config.atr_period
         self.stop_loss_mult = config.stop_loss_mult
         self.take_profit_mult = config.take_profit_mult
         self.trailing_pct = config.trailing_pct
         self.trailing_start = config.trailing_start
-        self.ranker = SignalRanker(config.rank_factor_weights, config.rank_factor_directions)
-        self.market_regime = MarketRegime(config.market_regime, self.data_provider)
-        # CachedProvider 有 get_daily_dataframe 优化路径
-        self._has_fast_daily = hasattr(self.data_provider, 'get_daily_dataframe')
 
-        # 缓存全市场股票列表（避免每日重复查询）
-        self._all_codes = self.data_provider.get_all_stock_codes()
-
-        # 状态
+        # ── Runtime state ──
         self.current_capital = config.initial_capital
-        self.positions: Dict[str, Position] = {}  # stock_code -> Position
+        self.positions: Dict[str, Position] = {}
         self.daily_results: List[DailyResult] = []
         self.trade_history: List[TradeRecord] = []
-        self._cache_df: pd.DataFrame = pd.DataFrame()  # master DataFrame: trade_date 索引, stock_code 列
+
+        # ── Rolling pointer: prev/current day DataFrames (~4760 rows each) ──
+        self._prev_df: pd.DataFrame = pd.DataFrame()
+        self._today_df: pd.DataFrame = pd.DataFrame()
 
     def run(self) -> List[DailyResult]:
         """运行回测"""
