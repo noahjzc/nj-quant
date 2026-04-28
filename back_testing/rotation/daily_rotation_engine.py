@@ -259,11 +259,11 @@ class DailyRotationEngine:
 
         for stock_code, position in list(self.positions.items()):
             if stock_code not in stock_data:
-                # 停牌股：无法获取当日价格，从 master 缓存中取最后一日收盘价平仓
-                if stock_code in self._cache_df['stock_code'].values:
-                    df_cached = self._cache_df[self._cache_df['stock_code'] == stock_code].sort_index()
-                    if not df_cached.empty:
-                        price = df_cached['close'].iloc[-1]
+                price = 0.0
+                if not self._prev_df.empty:
+                    prev_rows = self._prev_df[self._prev_df['stock_code'] == stock_code]
+                    if not prev_rows.empty:
+                        price = float(prev_rows['close'].iloc[-1])
                     if price > 0:
                         shares, cost = self.trade_executor.execute_sell(stock_code, price, position.shares)
                         if shares > 0:
@@ -303,10 +303,7 @@ class DailyRotationEngine:
             # ATR 止损/止盈/移动止损检查
             current_price = current_prices.get(stock_code, 0.0)
             if current_price > 0:
-                try:
-                    atr = StopLossStrategies.calculate_atr(df, period=self.atr_period)
-                except Exception:
-                    atr = 0.0
+                atr = float(df['atr_14'].iloc[-1]) if 'atr_14' in df.columns else 0.0
                 if atr > 0:
                     exit_result = StopLossStrategies.check_exit(
                         position={'buy_price': position.buy_price},
