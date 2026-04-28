@@ -231,13 +231,20 @@ class DailyDataCache:
         # ── 0. Version check for incremental build safety ──
         CACHE_VERSION = 2  # v1=raw columns, v2=with precomputed rolling indicators
         version_path = cache_path / 'cache_version.txt'
+        needs_rebuild = False
         if version_path.exists():
             existing_version = int(version_path.read_text().strip())
             if existing_version < CACHE_VERSION:
                 print(f"缓存版本不兼容 (v{existing_version} → v{CACHE_VERSION})，强制重建所有日期...")
-                import shutil
-                for f in daily_dir.glob('*.parquet'):
-                    f.unlink()
+                needs_rebuild = True
+        elif any(daily_dir.glob('*.parquet')):
+            # No version marker + existing files = old v1 cache, must rebuild
+            print(f"检测到旧版缓存（无版本标记），强制重建所有日期...")
+            needs_rebuild = True
+        if needs_rebuild:
+            import shutil
+            for f in daily_dir.glob('*.parquet'):
+                f.unlink()
         version_path.write_text(str(CACHE_VERSION))
 
         load_start = (pd.Timestamp(start_date) - pd.Timedelta(days=preload_days)).strftime('%Y-%m-%d')
