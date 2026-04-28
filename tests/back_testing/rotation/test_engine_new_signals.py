@@ -14,19 +14,30 @@ class TestBuildSignalFeatures:
         config = RotationConfig()
         engine = DailyRotationEngine(config, '2024-01-01', '2024-01-31')
 
-        dates = pd.date_range('2024-01-01', '2024-01-25', freq='B')
-        rows = []
-        for i, d in enumerate(dates):
-            rows.append({
-                'trade_date': d, 'stock_code': 'sh600001',
-                'close': 10 + i * 0.1, 'open': 10 + i * 0.1,
-                'high': 11 + i * 0.1, 'low': 9 + i * 0.1,
-                'volume': 1000, 'kdj_k': 50, 'kdj_d': 48,
-                'macd_dif': 0.5, 'macd_dea': 0.3,
-                'ma_5': 10, 'ma_20': 9.5,
-                'boll_mid': 10, 'psy': 30.0, 'psyma': 28.0,
-            })
-        engine._cache_df = pd.DataFrame(rows).set_index('trade_date')
+        rows_prev = [{
+            'trade_date': pd.Timestamp('2024-01-24'),
+            'stock_code': 'sh600001',
+            'close': 10.0, 'open': 10.0, 'high': 11.0, 'low': 9.0,
+            'volume': 1000, 'kdj_k': 50, 'kdj_d': 48,
+            'macd_dif': 0.5, 'macd_dea': 0.3,
+            'ma_5': 10, 'ma_20': 9.5, 'boll_mid': 10,
+            'psy': 30.0, 'psyma': 28.0,
+            'vol_ma5': 1000, 'vol_ma20': 1000,
+            'close_std_20': 0.5, 'high_20_max': 11.0,
+        }]
+        rows_today = [{
+            'trade_date': pd.Timestamp('2024-01-25'),
+            'stock_code': 'sh600001',
+            'close': 10.1, 'open': 10.1, 'high': 11.1, 'low': 9.1,
+            'volume': 1000, 'kdj_k': 52, 'kdj_d': 49,
+            'macd_dif': 0.6, 'macd_dea': 0.4,
+            'ma_5': 10.1, 'ma_20': 9.6, 'boll_mid': 10.1,
+            'psy': 35.0, 'psyma': 30.0,
+            'vol_ma5': 1000, 'vol_ma20': 1000,
+            'close_std_20': 0.6, 'high_20_max': 11.1,
+        }]
+        engine._prev_df = pd.DataFrame(rows_prev).set_index('trade_date')
+        engine._today_df = pd.DataFrame(rows_today).set_index('trade_date')
 
         features = engine._build_signal_features(['sh600001'])
         assert 'psy' in features.columns
@@ -40,19 +51,23 @@ class TestNewFactorExtraction:
         config = RotationConfig()
         engine = DailyRotationEngine(config, '2024-01-01', '2024-03-31')
 
-        # Need >= MIN_TRADING_DAYS (20) rows for _get_daily_stock_data to return the stock
-        dates = pd.date_range('2024-01-02', '2024-02-01', freq='B')
-        rows = []
-        for i, d in enumerate(dates):
-            rows.append({
-                'trade_date': d, 'stock_code': 'sh600001',
-                'close': 10 + i * 0.1, 'open': 10 + i * 0.1,
-                'high': 11 + i * 0.1, 'low': 9 + i * 0.1,
-                'volume': 1000, 'circulating_mv': 1e9,
-            })
-        engine._cache_df = pd.DataFrame(rows).set_index('trade_date')
+        target_date = pd.Timestamp('2024-02-01')
+        prev_date = pd.Timestamp('2024-01-31')
 
-        stock_data = engine._get_daily_stock_data(dates[-1])
+        row_prev = {
+            'trade_date': prev_date, 'stock_code': 'sh600001',
+            'close': 10.0, 'open': 10.0, 'high': 11.0, 'low': 9.0,
+            'volume': 1000, 'circulating_mv': 1e9,
+        }
+        row_today = {
+            'trade_date': target_date, 'stock_code': 'sh600001',
+            'close': 10.1, 'open': 10.1, 'high': 11.1, 'low': 9.1,
+            'volume': 1000, 'circulating_mv': 1e9,
+        }
+        engine._prev_df = pd.DataFrame([row_prev]).set_index('trade_date')
+        engine._today_df = pd.DataFrame([row_today]).set_index('trade_date')
+
+        stock_data = engine._get_daily_stock_data(target_date)
         assert 'sh600001' in stock_data
         df = stock_data['sh600001']
         row = df.iloc[-1]
