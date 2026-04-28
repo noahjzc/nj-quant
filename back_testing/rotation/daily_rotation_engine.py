@@ -490,21 +490,12 @@ class DailyRotationEngine:
             row = df.iloc[-1]
             factor_row = {}
 
-            # 计算 RET_5（OVERHEAT 计算需要）
-            if len(df) >= 5 and 'close' in df.columns:
-                ret5 = row['close'] / df['close'].iloc[-5] - 1
-            else:
-                ret5 = 0.0
-
             for factor in self.ranker.factor_weights.keys():
                 if factor == 'RET_20':
-                    # 20日收益率 = 当日收盘 / 20日前收盘 - 1
-                    if len(df) >= 20 and 'close' in df.columns:
-                        factor_row[factor] = row['close'] / df['close'].iloc[-20] - 1
-                    else:
-                        factor_row[factor] = np.nan
+                    factor_row[factor] = float(row.get('ret_20', 0.0) or 0.0)
                 elif factor == 'OVERHEAT':
                     rsi_val = row.get('rsi_1', np.nan)
+                    ret5 = float(row.get('ret_5', 0.0) or 0.0)
                     if pd.notna(rsi_val):
                         factor_row[factor] = compute_overheat(
                             float(rsi_val), ret5,
@@ -516,12 +507,13 @@ class DailyRotationEngine:
                 elif factor == 'circulating_mv':
                     val = row.get('circulating_mv', np.nan)
                     factor_row[factor] = np.log(val) if val > 0 else np.nan
-                elif factor in ('WR_10', 'WR_14'):
-                    period = 10 if factor == 'WR_10' else 14
-                    factor_row[factor] = FactorProcessor.williams_r(df, period)
+                elif factor == 'WR_10':
+                    factor_row[factor] = float(row.get('wr_10', np.nan) or 0.0)
+                elif factor == 'WR_14':
+                    factor_row[factor] = float(row.get('wr_14', np.nan) or 0.0)
                 elif factor in row.index:
                     val = row[factor]
-                    factor_row[factor] = val if val == val else np.nan  # NaN check
+                    factor_row[factor] = val if val == val else np.nan
                 else:
                     factor_row[factor] = np.nan
             factor_data_dict[stock_code] = factor_row
