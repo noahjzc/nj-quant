@@ -27,7 +27,6 @@ def compute_overheat(
     return (rsi_component + ret_component) / 2.0
 from back_testing.rotation.signal_engine.signal_filter import SignalFilter
 from back_testing.rotation.signal_engine.signal_ranker import SignalRanker
-from back_testing.factors.factor_utils import FactorProcessor
 from back_testing.rotation.market_regime import MarketRegime
 from back_testing.rotation.position_manager import RotationPositionManager
 from back_testing.rotation.trade_executor import TradeExecutor, TradeRecord
@@ -618,21 +617,6 @@ class DailyRotationEngine:
                 df['trade_date'] = candidate
                 self._prev_df = df.set_index('trade_date')
                 return
-
-    def _preload_histories(self, first_date: pd.Timestamp):
-        """预加载初始窗口：回测首日前30个日历日的数据 → master DataFrame"""
-        if not self._all_codes:
-            return
-
-        start = (first_date - pd.Timedelta(days=self.PRELOAD_DAYS)).strftime('%Y-%m-%d')
-        end = first_date.strftime('%Y-%m-%d')
-
-        histories = self.data_provider.get_batch_histories(
-            self._all_codes, end_date=end, start_date=start
-        )
-
-        frames = [df for df in histories.values() if not df.empty]
-        self._cache_df = pd.concat(frames) if frames else pd.DataFrame()
 
     def _advance_to_date(self, date: pd.Timestamp):
         """滚动指针: 将前一日的 _today_df 变为 _prev_df，读入当日新数据。
