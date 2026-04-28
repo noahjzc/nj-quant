@@ -26,7 +26,6 @@ def run(start_date: str, end_date: str, config: RotationConfig = None, verbose: 
 
     config = config or RotationConfig()
     data_provider = None
-    preloaded_cache = None
 
     if cache_dir:
         cache_path = DailyDataCache.build(
@@ -40,17 +39,8 @@ def run(start_date: str, end_date: str, config: RotationConfig = None, verbose: 
         print(f"数据缓存就绪: {cache_path}")
         print(f"  {len(cache.stock_codes)} 只股票, {len(cache.trading_dates)} 个交易日")
 
-        # 构建预加载缓存（首日前 30 天数据打包为单个 Parquet，避免 30+ 次文件读取）
-        index_df = data_provider.get_index_data(config.benchmark_index, start_date, end_date)
-        if index_df is not None and not index_df.empty:
-            first_date = index_df.index[0].strftime('%Y-%m-%d')
-            preload_path = str(cache.cache_dir / 'preload.parquet')
-            cache.write_preload_cache(first_date, preload_path)
-            preloaded_cache = DailyDataCache.load_preload_dataframe(preload_path)
-
     engine = DailyRotationEngine(config, start_date, end_date,
-                                 data_provider=data_provider,
-                                 preloaded_cache=preloaded_cache)
+                                 data_provider=data_provider)
     results = engine.run()
 
     # 输出统计

@@ -246,8 +246,7 @@ def objective(trial: optuna.Trial,
               start_date: str,
               end_date: str,
               base_config: RotationConfig = None,
-              data_provider=None,
-              preload_cache_path: str = None) -> float:
+              data_provider=None) -> float:
     """Optuna 目标函数: 采样参数 → 运行回测 → 返回年化 Sharpe
 
     这是 Optuna 优化的核心回调。每个 Trial 的完整生命周期:
@@ -261,18 +260,12 @@ def objective(trial: optuna.Trial,
     - 异常/无结果 → 返回 0.0
     Sharpe 为 0 在 TPE 采样中是明确的不良信号，会被逐渐排除。
 
-    降级策略:
-    当 preload_cache_path 未提供时（如 DataProvider 模式），引擎会自动
-    调用 _preload_histories() 从原始数据源加载。这会慢很多但保证正确性。
-
     Args:
         trial: Optuna trial 对象
         start_date: 回测开始日期 'YYYY-MM-DD'
         end_date: 回测结束日期 'YYYY-MM-DD'
         base_config: 基础配置（固定参数从此继承）
         data_provider: 数据提供器（CachedProvider 或 DataProvider），None 则每次新建
-        preload_cache_path: 预加载缓存文件路径（preload.parquet），
-                           避免每个 Trial 从 30+ 个 Parquet 文件重复读取
 
     Returns:
         年化 Sharpe Ratio（供 Optuna 最大化）
@@ -280,17 +273,10 @@ def objective(trial: optuna.Trial,
     # 1. 从 Trial 采样参数 → 构建本次回测的配置
     config = sample_config(trial, base_config)
 
-    # 2. 加载预加载缓存（如果可用）: 30 天历史数据打包为单个 Parquet
-    #    避免每个 Trial 重复读取 30+ 个日文件，是并行优化的关键优化
-    preloaded_cache = None
-    if preload_cache_path:
-        preloaded_cache = DailyDataCache.load_preload_dataframe(preload_cache_path)
-
     try:
-        # 3. 创建引擎并运行完整回测
+        # 2. 创建引擎并运行完整回测
         engine = DailyRotationEngine(config, start_date, end_date,
-                                     data_provider=data_provider,
-                                     preloaded_cache=preloaded_cache)
+                                     data_provider=data_provider)
         results = engine.run()
 
         # 4. 结果不足 → 返回 0（数据不够或回测失败）
@@ -437,13 +423,8 @@ def run_single_optimization(
         **storage_kwargs,
     )
 
-    # 构建预加载缓存: 将回测首日前 30 天的全市场数据打包为单个 Parquet 文件
-    # 这是关键性能优化: 没有此缓存，每个 Trial 都要重复读取 30+ 个 Parquet 日文件
-    # 有了它，每个 Trial 只需一次 pd.read_parquet() 即可获得完整的历史窗口
-    preload_cache_path = _build_preload_cache(data_provider, base_config, start_date, end_date)
-
     # 创建目标函数的偏应用版本，闭包捕获固定参数
-    obj = lambda trial: objective(trial, start_date, end_date, base_config, data_provider, preload_cache_path)
+    obj = lambda trial: objective(trial, start_date, end_date, base_config, data_provider)
     # 启动优化: show_progress_bar=True 显示 tqdm 进度条
     study.optimize(obj, n_trials=n_trials, show_progress_bar=True, n_jobs=n_jobs)
 
@@ -556,9 +537,7 @@ def run_walk_forward(
         #    这是 Walk-Forward 的核心: 验证参数在样本外的表现
         test_start_str = test_s.strftime('%Y-%m-%d')
         test_end_str = test_e.strftime('%Y-%m-%d')
-        # 为测试期单独构建预加载缓存（日期范围不同）
-        test_preload_path = _build_preload_cache(data_provider, base_config, test_start_str, test_end_str)
-        test_sharpe = _evaluate_on_test(best_config, test_start_str, test_end_str, data_provider, test_preload_path)
+        test_sharpe = _evaluate_on_test(best_config, test_start_str, test_end_str, data_provider)
 
         # 5. 记录窗口结果
         record = {
@@ -697,7 +676,7 @@ def _build_preload_cache(data_provider, base_config, start_date: str, end_date: 
 
 
 def _evaluate_on_test(config: RotationConfig, start: str, end: str,
-                      data_provider=None, preload_cache_path: str = None) -> float:
+                      data_provider=None) -> float:
     """在测试集上评估给定配置（纯评估，不优化参数）
 
     用于 Walk-Forward 的测试期评估: 在训练期找到最优参数后，
@@ -716,19 +695,13 @@ def _evaluate_on_test(config: RotationConfig, start: str, end: str,
         start: 测试期开始日期
         end: 测试期结束日期
         data_provider: 数据提供器
-        preload_cache_path: 预加载缓存路径（测试期需要单独的缓存）
 
     Returns:
         年化 Sharpe Ratio
     """
-    preloaded_cache = None
-    if preload_cache_path:
-        preloaded_cache = DailyDataCache.load_preload_dataframe(preload_cache_path)
-
     try:
         engine = DailyRotationEngine(config, start, end,
-                                     data_provider=data_provider,
-                                     preloaded_cache=preloaded_cache)
+                                     data_provider=data_provider)
         results = engine.run()
         if not results or len(results) < 2:
             return 0.0
