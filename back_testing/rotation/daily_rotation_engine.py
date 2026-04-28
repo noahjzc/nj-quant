@@ -643,62 +643,21 @@ class DailyRotationEngine:
         self._cache_df = pd.concat(frames) if frames else pd.DataFrame()
 
     def _advance_to_date(self, date: pd.Timestamp):
-        """推进到指定日期：读取当日 Parquet，一次 concat 追加到 master DataFrame"""
+        """滚动指针: 将前一日的 _today_df 变为 _prev_df，读入当日新数据。
+
+        不再累积历史数据，不再 concat。每天只读一个 Parquet 文件。
+        """
+        self._prev_df = self._today_df
+
         date_str = date.strftime('%Y-%m-%d')
+        day_df = self.data_provider.get_daily_dataframe(date_str)
+        if day_df is None or day_df.empty:
+            self._today_df = pd.DataFrame()
+            return
 
-        if self._has_fast_daily:
-            day_df = self.data_provider.get_daily_dataframe(date_str)
-            if day_df is None or day_df.empty:
-                return
-
-            day_df = day_df.copy()
-            day_df['trade_date'] = pd.Timestamp(date_str)
-            day_df = day_df.set_index('trade_date')
-
-            # 清理停牌/退市股票（不在当日交易且无持仓的股票从缓存中移除）
-            trading_codes = set(day_df['stock_code'].unique())
-            if not self._cache_df.empty:
-                positions_set = {p.stock_code for p in self.positions.values()}
-                cached_codes = set(self._cache_df['stock_code'].unique())
-                stale = cached_codes - trading_codes - positions_set
-                if stale:
-                    self._cache_df = self._cache_df[~self._cache_df['stock_code'].isin(stale)]
-
-            # 一次 concat 追加所有股票（替代 4761 次 per-stock concat）
-            if self._cache_df.empty:
-                self._cache_df = day_df
-            else:
-                self._cache_df = pd.concat([self._cache_df, day_df], sort=False)
-        else:
-            # 原始路径：DataProvider 返回 dict → 转为 DataFrame 后一次 concat
-            day_data = self.data_provider.get_stocks_for_date(self._all_codes, date_str)
-            if not day_data:
-                return
-
-            from collections import defaultdict
-            rows: list = []
-            for stock_code, row_data in day_data.items():
-                row_data['trade_date'] = pd.Timestamp(date_str)
-                row_data['stock_code'] = stock_code
-                rows.append(row_data)
-
-            if not rows:
-                return
-
-            day_df = pd.DataFrame(rows).set_index('trade_date')
-
-            trading_codes = set(day_data.keys())
-            if not self._cache_df.empty:
-                positions_set = {p.stock_code for p in self.positions.values()}
-                cached_codes = set(self._cache_df['stock_code'].unique())
-                stale = cached_codes - trading_codes - positions_set
-                if stale:
-                    self._cache_df = self._cache_df[~self._cache_df['stock_code'].isin(stale)]
-
-            if self._cache_df.empty:
-                self._cache_df = day_df
-            else:
-                self._cache_df = pd.concat([self._cache_df, day_df], sort=False)
+        day_df = day_df.copy()
+        day_df['trade_date'] = pd.Timestamp(date_str)
+        self._today_df = day_df.set_index('trade_date')
 
     def _get_daily_stock_data(self, date: pd.Timestamp) -> Dict[str, pd.DataFrame]:
         """从 master DataFrame 中提取当日活跃股票的滚动数据（≥20 个交易日）"""
