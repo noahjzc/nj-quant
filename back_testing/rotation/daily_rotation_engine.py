@@ -658,33 +658,34 @@ class DailyRotationEngine:
         return result
 
     def _filter_stock_pool(self, stock_data: Dict[str, pd.DataFrame]) -> Dict[str, pd.DataFrame]:
-        """过滤股票池（ST、涨跌停、停牌）"""
-        filtered = {}
-        for stock_code, df in stock_data.items():
-            if df.empty:
-                continue
-            latest = df.iloc[-1]
+        """过滤股票池（ST、涨跌停、停牌）— 向量化在 _today_df 上。
 
-            if self.config.exclude_st:
-                name = str(latest.get('stock_name', ''))
-                if 'ST' in name or '*ST' in name:
-                    continue
+        只需一次向量化掩码计算，避免逐股迭代 5300 次。
+        """
+        if self._today_df.empty:
+            return {}
 
-            if self.config.exclude_limit_up:
-                # 用 change_pct 近似判断涨停（A股涨跌停板 ≈ ±10%）
-                change_pct = latest.get('change_pct', 0.0) or 0.0
-                if change_pct >= 9.9:
-                    continue
+        today = self._today_df
+        mask = pd.Series(True, index=today.index)
 
-            if self.config.exclude_limit_down:
-                change_pct = latest.get('change_pct', 0.0) or 0.0
-                if change_pct <= -9.9:
-                    continue
+        if self.config.exclude_st and 'stock_name' in today.columns:
+            mask &= ~today['stock_name'].astype(str).str.contains(
+                r'ST|\*ST', regex=True, na=False
+            )
 
-            if self.config.exclude_suspended:
-                if latest.get('volume', 0) == 0:
-                    continue
+        if self.config.exclude_limit_up:
+            chg = today['change_pct'].fillna(0.0)
+            mask &= chg < 9.9
 
-            filtered[stock_code] = df
+        if self.config.exclude_limit_down:
+            chg = today['change_pct'].fillna(0.0)
+            mask &= chg > -9.9
 
-        return filtered
+        if self.config.exclude_suspended:
+            mask &= today['volume'].fillna(0.0) > 0
+
+        valid_codes = set(today.loc[mask, 'stock_code'])
+        if len(valid_codes) == len(stock_data):
+            return stock_data
+
+        return {code: df for code, df in stock_data.items() if code in valid_codes}
