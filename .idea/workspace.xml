@@ -5,7 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="ba9c56f9-9fae-4e2f-bc58-82725a66fec3" name="Changes" comment="refactor(data): 优化日线数据缓存加载策略以避免内存溢出&#10;&#10;- 将一次性全量加载改为按日分批查询写入&#10;- 每日期数据单独查询后立即释放内存，避免OOM问题&#10;- 实现增量构建机制，已存在的daily文件自动跳过&#10;- 重构缓存目录结构为平坦结构，daily文件直接写入{cache_dir}/daily/&#10;- 更新交易日列表生成逻辑，从已缓存文件收集而非数据库查询&#10;- 将日志输出方式从logger改为print，优化进度显示&#10;- 添加详细的函数文档说明新的加载策略和缓存复用机制">
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.claude/settings.local.json" beforeDir="false" afterPath="$PROJECT_DIR$/.claude/settings.local.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/backtest/run_daily_rotation.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/backtest/run_daily_rotation.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/run_daily_rotation_optimization.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/run_daily_rotation_optimization.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -219,7 +222,7 @@
       <workItem from="1777098761029" duration="1704000" />
       <workItem from="1777102338388" duration="26350000" />
       <workItem from="1777296730598" duration="456000" />
-      <workItem from="1777298314034" duration="10784000" />
+      <workItem from="1777298314034" duration="18204000" />
     </task>
     <task id="LOCAL-00001" summary="init">
       <option name="closed" value="true" />
@@ -269,7 +272,15 @@
       <option name="project" value="LOCAL" />
       <updated>1777352238899</updated>
     </task>
-    <option name="localTasksCounter" value="7" />
+    <task id="LOCAL-00007" summary="refactor(data): 优化日线数据缓存加载策略以避免内存溢出&#10;&#10;- 将一次性全量加载改为按日分批查询写入&#10;- 每日期数据单独查询后立即释放内存，避免OOM问题&#10;- 实现增量构建机制，已存在的daily文件自动跳过&#10;- 重构缓存目录结构为平坦结构，daily文件直接写入{cache_dir}/daily/&#10;- 更新交易日列表生成逻辑，从已缓存文件收集而非数据库查询&#10;- 将日志输出方式从logger改为print，优化进度显示&#10;- 添加详细的函数文档说明新的加载策略和缓存复用机制">
+      <option name="closed" value="true" />
+      <created>1777352380625</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1777352380625</updated>
+    </task>
+    <option name="localTasksCounter" value="8" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">

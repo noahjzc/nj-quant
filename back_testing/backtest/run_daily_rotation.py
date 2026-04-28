@@ -4,10 +4,12 @@ import logging
 from back_testing.rotation.daily_rotation_engine import DailyRotationEngine
 from back_testing.rotation.config import RotationConfig, MarketRegimeConfig
 from back_testing.analysis.performance_analyzer import PerformanceAnalyzer
+from back_testing.data.daily_data_cache import DailyDataCache, CachedProvider
 import pandas as pd
 
 
-def run(start_date: str, end_date: str, config: RotationConfig = None, verbose: bool = False):
+def run(start_date: str, end_date: str, config: RotationConfig = None, verbose: bool = False,
+        cache_dir: str = None):
     """运行每日轮动回测"""
     # 配置日志
     level = logging.DEBUG if verbose else logging.INFO
@@ -23,7 +25,32 @@ def run(start_date: str, end_date: str, config: RotationConfig = None, verbose: 
     print(f"=" * 60)
 
     config = config or RotationConfig()
-    engine = DailyRotationEngine(config, start_date, end_date)
+    data_provider = None
+    preloaded_cache = None
+
+    if cache_dir:
+        cache_path = DailyDataCache.build(
+            start_date=start_date,
+            end_date=end_date,
+            cache_dir=cache_dir,
+            benchmark_index=config.benchmark_index,
+        )
+        cache = DailyDataCache(cache_path)
+        data_provider = CachedProvider(cache)
+        print(f"数据缓存就绪: {cache_path}")
+        print(f"  {len(cache.stock_codes)} 只股票, {len(cache.trading_dates)} 个交易日")
+
+        # 构建预加载缓存（首日前 30 天数据打包为单个 Parquet，避免 30+ 次文件读取）
+        index_df = data_provider.get_index_data(config.benchmark_index, start_date, end_date)
+        if index_df is not None and not index_df.empty:
+            first_date = index_df.index[0].strftime('%Y-%m-%d')
+            preload_path = str(cache.cache_dir / 'preload.parquet')
+            cache.write_preload_cache(first_date, preload_path)
+            preloaded_cache = DailyDataCache.load_preload_dataframe(preload_path)
+
+    engine = DailyRotationEngine(config, start_date, end_date,
+                                 data_provider=data_provider,
+                                 preloaded_cache=preloaded_cache)
     results = engine.run()
 
     # 输出统计
@@ -73,6 +100,10 @@ if __name__ == '__main__':
     parser.add_argument('--start', default='2024-01-01', help='开始日期')
     parser.add_argument('--end', default='2024-12-31', help='结束日期')
     parser.add_argument('--verbose', action='store_true', help='输出详细日志')
+    parser.add_argument('--cache-dir', default='cache/daily_rotation',
+                        help='Parquet 缓存目录（默认: cache/daily_rotation）')
+    parser.add_argument('--no-cache', action='store_true', help='不使用缓存（每次从 DB 查询）')
     args = parser.parse_args()
 
-    run(args.start, args.end, verbose=args.verbose)
+    run(args.start, args.end, verbose=args.verbose,
+        cache_dir=None if args.no_cache else args.cache_dir)
