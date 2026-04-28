@@ -229,3 +229,4 @@ back_testing/config/database.ini
 cache
 
 *.sql
+*.db
