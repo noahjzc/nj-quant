@@ -167,6 +167,8 @@ def main():
 
         logger.info(f"Fetching daily data for {tushare_date}...")
         daily_df = client.get_daily_all(tushare_date)
+        # Rename Tushare daily columns to match DB schema
+        daily_df = daily_df.rename(columns={'vol': 'volume', 'amount': 'turnover_amount'})
         logger.info(f"  daily: {len(daily_df)} rows")
 
         logger.info(f"Fetching daily_basic for {tushare_date}...")
@@ -374,6 +376,8 @@ def _backfill_single_day(target_date: date, token: str) -> tuple[bool, int, str 
 
     try:
         daily_df = client.get_daily_all(tushare_date)
+        # Rename Tushare daily columns to match DB schema
+        daily_df = daily_df.rename(columns={'vol': 'volume', 'amount': 'turnover_amount'})
         if daily_df.empty:
             return False, 0, f"Tushare daily returned empty for {tushare_date}"
 
