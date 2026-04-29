@@ -76,6 +76,7 @@ class RotationConfig:
     market_regime: MarketRegimeConfig = field(default_factory=MarketRegimeConfig)
     # 股票池过滤
     exclude_st: bool = True
+    exclude_new_stocks: bool = True
     exclude_limit_up: bool = True
     exclude_limit_down: bool = True
     exclude_suspended: bool = True

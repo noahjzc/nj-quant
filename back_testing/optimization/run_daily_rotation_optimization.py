@@ -411,6 +411,7 @@ def run_single_optimization(
         direction='maximize',
         sampler=optuna.samplers.TPESampler(seed=42),
         study_name=study_name,
+        load_if_exists=True,
         **storage_kwargs,
     )
 
@@ -794,7 +795,7 @@ def _save_results(study: optuna.Study, best_config: RotationConfig,
     print(f"最优参数已保存: {best_path}")
 
     # 保存所有 Trial 记录 CSV
-    trials_path = output_dir / 'optuna_trials_{now}.csv'
+    trials_path = output_dir / f'optuna_trials_{now}.csv'
     df = study.trials_dataframe()
     df.to_csv(trials_path, index=False, encoding='utf-8-sig')
     print(f"Trial 记录已保存: {trials_path} ({len(df)} 条)")
@@ -886,6 +887,7 @@ if __name__ == '__main__':
     parser.add_argument('--step-months', type=int, default=3, help='WF 步进（月）')
     parser.add_argument('--no-cache', action='store_true', help='不使用缓存（每次从 DB 查询）')
     parser.add_argument('--storage', default=None, help='Optuna 持久化存储（如 sqlite:///optuna.db），默认内存模式')
+    parser.add_argument('--study-name', default=None, help='Optuna Study 名称（用于 Dashboard 识别和持久化恢复）')
     parser.add_argument('--verbose', action='store_true', help='详细日志')
 
     args = parser.parse_args()
@@ -919,6 +921,7 @@ if __name__ == '__main__':
             end_date=args.end,
             n_trials=args.trials,
             base_config=base_config,
+            study_name=args.study_name,
             output_dir=args.output,
             n_jobs=args.n_jobs,
             data_provider=cached_provider,

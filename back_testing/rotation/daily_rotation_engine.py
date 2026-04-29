@@ -254,7 +254,7 @@ class DailyRotationEngine:
 
         # 过滤股票池（向量化在 _today_df 上）
         t0 = time.perf_counter()
-        valid_codes = self._filter_stock_pool()
+        valid_codes = self._filter_stock_pool(date)
         stats['filter'] = time.perf_counter() - t0
 
         # 获取持仓快照（代码→当前价）— 从 _today_df 直接读取，零 groupby
@@ -747,8 +747,8 @@ class DailyRotationEngine:
         indexed = today.set_index('stock_code')
         return indexed['close'].to_dict()
 
-    def _filter_stock_pool(self) -> set:
-        """过滤股票池（ST、涨跌停、停牌）— 向量化在 _today_df 上。
+    def _filter_stock_pool(self, date: pd.Timestamp) -> set:
+        """过滤股票池（ST、新股、涨跌停、停牌）— 向量化在 _today_df 上。
 
         返回有效股票代码集合。零 groupby，零逐股迭代。
         """
@@ -763,12 +763,19 @@ class DailyRotationEngine:
                 r'ST|\*ST', regex=True, na=False
             )
 
+        if self.config.exclude_new_stocks and 'stock_name' in today.columns:
+            mask &= ~today['stock_name'].astype(str).str.match(
+                r'^N', na=False
+            )
+
         if self.config.exclude_limit_up or self.config.exclude_limit_down:
             chg = today['change_pct'].fillna(0.0)
             code = today['stock_code']
             # 不同市场的涨跌停幅度（数据为小数，0.1=10%）
             limit_pct = pd.Series(0.10, index=today.index)
-            limit_pct[code.str.startswith('sz30')] = 0.20
+            # 创业板: 2020-08-24 起由 10% 放宽至 20%
+            if date >= pd.Timestamp('2020-08-24'):
+                limit_pct[code.str.startswith('sz30')] = 0.20
             limit_pct[code.str.startswith('sh688')] = 0.20
             limit_pct[code.str.match(r'^bj8\d')] = 0.30
 
