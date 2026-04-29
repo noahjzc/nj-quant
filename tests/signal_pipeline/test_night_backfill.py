@@ -26,6 +26,10 @@ class TestConvertTsCode:
         from signal_pipeline.night_backfill import _convert_ts_code
         assert _convert_ts_code("600519.SH") == "sh600519"
 
+    def test_bj_code(self):
+        from signal_pipeline.night_backfill import _convert_ts_code
+        assert _convert_ts_code("920017.BJ") == "bj920017"
+
     def test_unknown_code_raises(self):
         from signal_pipeline.night_backfill import _convert_ts_code
         with pytest.raises(ValueError, match="Unknown Tushare code suffix"):

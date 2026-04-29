@@ -50,11 +50,14 @@ def _convert_ts_code(ts_code: str) -> str:
 
     000001.SZ → sz000001
     600519.SH → sh600519
+    920017.BJ → bj920017
     """
     if ts_code.endswith(".SZ"):
         return "sz" + ts_code[:-3]
     if ts_code.endswith(".SH"):
         return "sh" + ts_code[:-3]
+    if ts_code.endswith(".BJ"):
+        return "bj" + ts_code[:-3]
     raise ValueError(f"Unknown Tushare code suffix: {ts_code}")
 
 
