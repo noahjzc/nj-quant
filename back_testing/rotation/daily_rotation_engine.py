@@ -1,4 +1,5 @@
 """每日全市场轮动回测核心引擎"""
+import time
 import pandas as pd
 import numpy as np
 import logging
@@ -114,6 +115,10 @@ class DailyRotationEngine:
         self._prev_df: pd.DataFrame = pd.DataFrame()
         self._today_df: pd.DataFrame = pd.DataFrame()
 
+        # ── Diagnostic counters ──
+        self._n_stock_df_calls = 0
+        self._fallback_count = 0
+
     def run(self) -> List[DailyResult]:
         """Run the backtest main loop.
 
@@ -133,19 +138,58 @@ class DailyRotationEngine:
         now = datetime.now
         print(f"{now():%H:%M:%S} [DailyRotation] {self.start_date} ~ {self.end_date}, {n_dates}天")
 
+        # ── Timing diagnostics ──
+        t_total = 0.0
+        t_advance = 0.0
+        t_regime = 0.0
+        t_filter = 0.0
+        t_get_prices = 0.0
+        t_check_sell = 0.0
+        t_scan_buy = 0.0
+        t_execute_buy = 0.0
+        t_stock_df = 0.0
+        n_stock_df_calls = 0
+
         # ── Day-by-day loop ──
         for i, date in enumerate(dates):
             date_str = date.strftime('%Y-%m-%d')
             if i == 0 or (i + 1) % 10 == 0:
                 prev_asset = self.daily_results[-1].total_asset if self.daily_results else self.config.initial_capital
-                print(f"{now():%H:%M:%S}   [{i+1}/{n_dates}] {date_str} | 持仓:{len(self.positions)} | 资产:{prev_asset:,.0f}")
+                if i > 0:
+                    avg_day = t_total / i * 1000
+                    fb = f" FB:{self._fallback_count}" if self._fallback_count else ""
+                    print(f"{now():%H:%M:%S}   [{i+1}/{n_dates}] {date_str} | 持仓:{len(self.positions)} | 资产:{prev_asset:,.0f} | "
+                          f"avg:{avg_day:.0f}ms/d | adv:{t_advance*1000:.0f}ms reg:{t_regime*1000:.0f}ms "
+                          f"filt:{t_filter*1000:.0f}ms prc:{t_get_prices*1000:.0f}ms "
+                          f"sell:{t_check_sell*1000:.0f}ms scan:{t_scan_buy*1000:.0f}ms buy:{t_execute_buy*1000:.0f}ms "
+                          f"stk:{t_stock_df*1000:.0f}ms({n_stock_df_calls}){fb}")
+                else:
+                    print(f"{now():%H:%M:%S}   [{i+1}/{n_dates}] {date_str} | 持仓:{len(self.positions)} | 资产:{prev_asset:,.0f}")
 
+            t0 = time.perf_counter()
             self._advance_to_date(date)
-            result = self._run_single_day(date)
+            t_advance += time.perf_counter() - t0
+
+            t0 = time.perf_counter()
+            result, day_stats = self._run_single_day(date)
+            t_total += time.perf_counter() - t0
+
+            t_regime += day_stats.get('regime', 0)
+            t_filter += day_stats.get('filter', 0)
+            t_get_prices += day_stats.get('get_prices', 0)
+            t_check_sell += day_stats.get('check_sell', 0)
+            t_scan_buy += day_stats.get('scan_buy', 0)
+            t_execute_buy += day_stats.get('execute_buy', 0)
+            t_stock_df += day_stats.get('stock_df', 0)
+            n_stock_df_calls += day_stats.get('n_stock_df', 0)
+
             self.daily_results.append(result)
 
         final_asset = self.daily_results[-1].total_asset if self.daily_results else self.current_capital
-        print(f"{datetime.now():%H:%M:%S} [DailyRotation] 回测完成，最终资产: {final_asset:,.0f}")
+        avg_ms = t_total / n_dates * 1000
+        fb = f" | 降级:{self._fallback_count}次" if self._fallback_count else ""
+        print(f"{datetime.now():%H:%M:%S} [DailyRotation] 回测完成，最终资产: {final_asset:,.0f} | {avg_ms:.0f}ms/天 | "
+              f"stk_df:{n_stock_df_calls}次{t_stock_df*1000:.0f}ms{fb}")
         return self.daily_results
 
     def _log_daily_summary(
@@ -172,25 +216,35 @@ class DailyRotationEngine:
             top_codes = [s['stock_code'] for s in top_stocks_info]
             logger.info(f"[TOP] 买入候选排名: {top_codes}")
 
-    def _run_single_day(self, date: pd.Timestamp) -> DailyResult:
-        """每日流程"""
+    def _run_single_day(self, date: pd.Timestamp):
+        """每日流程。返回 (DailyResult, day_stats_dict)。"""
         date_str = date.strftime('%Y-%m-%d')
+        stats = {}  # 累积当日各子操作耗时
 
         # Step 0: 获取大盘状态，动态调整参数
+        t0 = time.perf_counter()
         regime_name, regime_params = self.market_regime.get_regime(date)
+        stats['regime'] = time.perf_counter() - t0
+
         self.position_manager.max_total_pct = regime_params.max_total_pct
         self.position_manager.max_position_pct = regime_params.max_position_pct
         max_positions = regime_params.max_positions
 
         # 当日无数据 → 返回空结果
         if self._today_df.empty:
-            return DailyResult(date_str, self.current_capital, self.current_capital, self.positions, [], regime_name, self.current_capital)
+            stats.update({'filter': 0, 'get_prices': 0, 'check_sell': 0,
+                          'scan_buy': 0, 'execute_buy': 0, 'stock_df': 0, 'n_stock_df': 0})
+            return DailyResult(date_str, self.current_capital, self.current_capital, self.positions, [], regime_name, self.current_capital), stats
 
         # 过滤股票池（向量化在 _today_df 上）
+        t0 = time.perf_counter()
         valid_codes = self._filter_stock_pool()
+        stats['filter'] = time.perf_counter() - t0
 
         # 获取持仓快照（代码→当前价）— 从 _today_df 直接读取，零 groupby
+        t0 = time.perf_counter()
         current_prices = self._get_current_prices(valid_codes)
+        stats['get_prices'] = time.perf_counter() - t0
 
         # Step 1: 更新持仓期间最高价
         for stock_code, position in self.positions.items():
@@ -199,7 +253,11 @@ class DailyRotationEngine:
                 position.highest_price = current_price
 
         # Step 2: 检查持仓卖出信号
+        t_stock_start = time.perf_counter()
+        n_stock_before = self._n_stock_df_calls if hasattr(self, '_n_stock_df_calls') else 0
+        t0 = time.perf_counter()
         sell_trades = self._check_and_sell(date_str, valid_codes, current_prices)
+        stats['check_sell'] = time.perf_counter() - t0
 
         # 更新现金（卖出）
         for trade in sell_trades:
@@ -207,7 +265,9 @@ class DailyRotationEngine:
 
         # Step 2: 扫描买入信号（排除当日已卖出的股票，防止同日来回交易）
         sold_today = [t.stock_code for t in sell_trades]
+        t0 = time.perf_counter()
         buy_candidates = self._scan_buy_candidates(valid_codes, exclude_codes=sold_today)
+        stats['scan_buy'] = time.perf_counter() - t0
 
         # Step 3: 重新计算 total_asset（此时包含卖出后的现金更新）
         total_asset = self.current_capital + self.position_manager.get_position_value(
@@ -217,7 +277,14 @@ class DailyRotationEngine:
         self.position_manager.update_capital(total_asset)
 
         # Step 4: 多因子排序，买入 TOP X
+        t0 = time.perf_counter()
         buy_trades, top_stocks_info = self._execute_buy(date_str, valid_codes, buy_candidates, max_positions, current_prices, total_asset)
+        stats['execute_buy'] = time.perf_counter() - t0
+
+        # 统计当日 _get_stock_df 调用次数与耗时
+        n_stock_after = self._n_stock_df_calls if hasattr(self, '_n_stock_df_calls') else 0
+        stats['n_stock_df'] = n_stock_after - n_stock_before
+        stats['stock_df'] = time.perf_counter() - t_stock_start - stats['check_sell'] - stats['scan_buy'] - stats['execute_buy']
 
         all_trades = sell_trades + buy_trades
 
@@ -239,7 +306,7 @@ class DailyRotationEngine:
             trades=all_trades,
             market_regime=regime_name,
             portfolio_value=total_asset
-        )
+        ), stats
 
     def _check_and_sell(
         self,
@@ -364,7 +431,10 @@ class DailyRotationEngine:
         try:
             features = self._build_signal_features(codes)
         except Exception:
-            # 回退到逐股检测
+            # 回退到逐股检测 — 极慢（每只股票 ~0.1ms × N）
+            self._fallback_count = getattr(self, '_fallback_count', 0) + 1
+            if self._fallback_count <= 3:
+                logger.warning(f"[SLOW-PATH] _build_signal_features 失败，降级到逐股检测 ({len(codes)} 只股票)")
             candidates = []
             for stock_code in codes:
                 df = self._get_stock_df(stock_code)
@@ -640,6 +710,7 @@ class DailyRotationEngine:
         仅在需要时（持仓卖出检查、候选买入因子提取）调用，
         每次 ~0.1ms（boolean mask on 4760 rows），替代全市场 groupby (~250ms)。
         """
+        self._n_stock_df_calls = getattr(self, '_n_stock_df_calls', 0) + 1
         rows = []
         if not self._prev_df.empty:
             p = self._prev_df[self._prev_df['stock_code'] == stock_code]
