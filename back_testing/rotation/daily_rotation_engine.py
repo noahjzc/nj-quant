@@ -182,16 +182,15 @@ class DailyRotationEngine:
         self.position_manager.max_position_pct = regime_params.max_position_pct
         max_positions = regime_params.max_positions
 
-        # 获取当日全市场日线
-        stock_data = self._get_daily_stock_data(date)
-        if not stock_data:
+        # 当日无数据 → 返回空结果
+        if self._today_df.empty:
             return DailyResult(date_str, self.current_capital, self.current_capital, self.positions, [], regime_name, self.current_capital)
 
-        # 过滤股票池
-        filtered_data = self._filter_stock_pool(stock_data)
+        # 过滤股票池（向量化在 _today_df 上）
+        valid_codes = self._filter_stock_pool()
 
-        # 获取持仓快照（代码→当前价）
-        current_prices = {code: df['close'].iloc[-1] for code, df in filtered_data.items() if not df.empty}
+        # 获取持仓快照（代码→当前价）— 从 _today_df 直接读取，零 groupby
+        current_prices = self._get_current_prices(valid_codes)
 
         # Step 1: 更新持仓期间最高价
         for stock_code, position in self.positions.items():
@@ -200,7 +199,7 @@ class DailyRotationEngine:
                 position.highest_price = current_price
 
         # Step 2: 检查持仓卖出信号
-        sell_trades = self._check_and_sell(date_str, filtered_data, current_prices)
+        sell_trades = self._check_and_sell(date_str, valid_codes, current_prices)
 
         # 更新现金（卖出）
         for trade in sell_trades:
@@ -208,7 +207,7 @@ class DailyRotationEngine:
 
         # Step 2: 扫描买入信号（排除当日已卖出的股票，防止同日来回交易）
         sold_today = [t.stock_code for t in sell_trades]
-        buy_candidates = self._scan_buy_candidates(filtered_data, exclude_codes=sold_today)
+        buy_candidates = self._scan_buy_candidates(valid_codes, exclude_codes=sold_today)
 
         # Step 3: 重新计算 total_asset（此时包含卖出后的现金更新）
         total_asset = self.current_capital + self.position_manager.get_position_value(
@@ -218,7 +217,7 @@ class DailyRotationEngine:
         self.position_manager.update_capital(total_asset)
 
         # Step 4: 多因子排序，买入 TOP X
-        buy_trades, top_stocks_info = self._execute_buy(date_str, filtered_data, buy_candidates, max_positions, current_prices, total_asset)
+        buy_trades, top_stocks_info = self._execute_buy(date_str, valid_codes, buy_candidates, max_positions, current_prices, total_asset)
 
         all_trades = sell_trades + buy_trades
 
@@ -245,49 +244,49 @@ class DailyRotationEngine:
     def _check_and_sell(
         self,
         date_str: str,
-        stock_data: Dict[str, pd.DataFrame],
+        valid_codes: set,
         current_prices: Dict[str, float]
     ) -> List[TradeRecord]:
-        """检查持仓是否有卖出信号"""
+        """检查持仓是否有卖出信号 — 仅在持仓股上按需构建 DataFrame"""
         sell_trades = []
         positions_to_close = []
 
         for stock_code, position in list(self.positions.items()):
-            if stock_code not in stock_data:
+            df = self._get_stock_df(stock_code)
+            if stock_code not in valid_codes:
+                # 停牌/退市：从 prev 缓存取最后收盘价平仓
                 price = 0.0
-                if not self._prev_df.empty:
-                    prev_rows = self._prev_df[self._prev_df['stock_code'] == stock_code]
-                    if not prev_rows.empty:
-                        price = float(prev_rows['close'].iloc[-1])
-                    if price > 0:
-                        shares, cost = self.trade_executor.execute_sell(stock_code, price, position.shares)
-                        if shares > 0:
-                            buy_price = position.buy_price
-                            holding_days = (pd.Timestamp(date_str) - pd.Timestamp(position.buy_date)).days
-                            return_pct = (price - buy_price) / buy_price * 100 if buy_price > 0 else 0
-                            pnl = (price - buy_price) * shares - cost
-                            capital_before_sell = self.current_capital
+                if not df.empty:
+                    price = float(df['close'].iloc[-1])
+                if price > 0:
+                    shares, cost = self.trade_executor.execute_sell(stock_code, price, position.shares)
+                    if shares > 0:
+                        buy_price = position.buy_price
+                        holding_days = (pd.Timestamp(date_str) - pd.Timestamp(position.buy_date)).days
+                        return_pct = (price - buy_price) / buy_price * 100 if buy_price > 0 else 0
+                        pnl = (price - buy_price) * shares - cost
+                        capital_before_sell = self.current_capital
 
-                            trade = TradeRecord(
-                                date=date_str,
-                                stock_code=stock_code,
-                                action='SELL',
-                                price=price,
-                                shares=shares,
-                                cost=cost,
-                                capital_before=capital_before_sell
-                            )
-                            sell_trades.append(trade)
-                            self.trade_history.append(trade)
-                            del self.positions[stock_code]
+                        trade = TradeRecord(
+                            date=date_str,
+                            stock_code=stock_code,
+                            action='SELL',
+                            price=price,
+                            shares=shares,
+                            cost=cost,
+                            capital_before=capital_before_sell
+                        )
+                        sell_trades.append(trade)
+                        self.trade_history.append(trade)
+                        del self.positions[stock_code]
 
-                            logger.info(
-                                f"[SELL/SUSPENDED] {date_str} {stock_code} @ {price:.3f} x {shares}股 "
-                                f"买价:{buy_price:.3f} 持有:{holding_days}天 收益:{return_pct:+.2f}% "
-                                f"PnL:{pnl:+,.0f} (卖前现金:{capital_before_sell:,.0f})"
-                            )
+                        logger.info(
+                            f"[SELL/SUSPENDED] {date_str} {stock_code} @ {price:.3f} x {shares}股 "
+                            f"买价:{buy_price:.3f} 持有:{holding_days}天 收益:{return_pct:+.2f}% "
+                            f"PnL:{pnl:+,.0f} (卖前现金:{capital_before_sell:,.0f})"
+                        )
                 continue
-            df = stock_data[stock_code]
+
             if df.empty or len(df) < 2:
                 continue
 
@@ -354,10 +353,10 @@ class DailyRotationEngine:
 
         return sell_trades
 
-    def _scan_buy_candidates(self, stock_data: Dict[str, pd.DataFrame], exclude_codes: List[str] = None) -> List[str]:
+    def _scan_buy_candidates(self, valid_codes: set, exclude_codes: List[str] = None) -> List[str]:
         """扫描全市场，返回有买入信号的股票代码（向量化）"""
         exclude_set = set(exclude_codes) if exclude_codes else set()
-        codes = [c for c in stock_data if c not in self.positions and c not in exclude_set]
+        codes = [c for c in valid_codes if c not in self.positions and c not in exclude_set]
         if not codes:
             return []
 
@@ -368,7 +367,7 @@ class DailyRotationEngine:
             # 回退到逐股检测
             candidates = []
             for stock_code in codes:
-                df = stock_data[stock_code]
+                df = self._get_stock_df(stock_code)
                 if df.empty or len(df) < 2:
                     continue
                 if self.buy_filter.filter_buy(df, stock_code):
@@ -463,7 +462,7 @@ class DailyRotationEngine:
     def _execute_buy(
         self,
         date_str: str,
-        stock_data: Dict[str, pd.DataFrame],
+        valid_codes: set,
         candidates: List[str],
         max_positions: int,
         current_prices: Dict[str, float],
@@ -476,11 +475,11 @@ class DailyRotationEngine:
         if x <= 0 or not candidates:
             return buy_trades, top_stocks_info
 
-        # 提取候选股因子数据
+        # 提取候选股因子数据 — 仅对候选股按需构建 DataFrame
         factor_data_dict = {}
         for stock_code in candidates:
-            df = stock_data.get(stock_code)
-            if df is None or df.empty:
+            df = self._get_stock_df(stock_code)
+            if df.empty:
                 continue
             row = df.iloc[-1]
             factor_row = {}
@@ -635,35 +634,43 @@ class DailyRotationEngine:
         day_df['trade_date'] = pd.Timestamp(date_str)
         self._today_df = day_df.set_index('trade_date')
 
-    def _get_daily_stock_data(self, date: pd.Timestamp) -> Dict[str, pd.DataFrame]:
-        """拼接 _prev_df + _today_df (~9500 行)，按股票分组为 {code: 2-row DataFrame}。
+    def _get_stock_df(self, stock_code: str) -> pd.DataFrame:
+        """按需构建单只股票的 1-2 行 DataFrame（前日+当日）。
 
-        每个 stock DataFrame 包含 1-2 行（前日+当日），index=trade_date。
-        预计算列已在 Parquet 中，无需历史窗口检查。
+        仅在需要时（持仓卖出检查、候选买入因子提取）调用，
+        每次 ~0.1ms（boolean mask on 4760 rows），替代全市场 groupby (~250ms)。
         """
-        if self._today_df.empty:
+        rows = []
+        if not self._prev_df.empty:
+            p = self._prev_df[self._prev_df['stock_code'] == stock_code]
+            if not p.empty:
+                rows.append(p)
+        if not self._today_df.empty:
+            t = self._today_df[self._today_df['stock_code'] == stock_code]
+            if not t.empty:
+                rows.append(t)
+        if not rows:
+            return pd.DataFrame()
+        return pd.concat(rows)
+
+    def _get_current_prices(self, valid_codes: set) -> Dict[str, float]:
+        """从 _today_df 直接提取有效股票的收盘价字典 — 零 groupby。
+
+        使用 set_index 向量化（~5ms），替代逐股 iloc[-1] 迭代 (~250ms)。
+        """
+        today = self._today_df[self._today_df['stock_code'].isin(valid_codes)]
+        if today.empty:
             return {}
+        indexed = today.set_index('stock_code')
+        return indexed['close'].to_dict()
 
-        # Concatenate prev + today (~9500 rows total for all stocks)
-        frames = [self._prev_df, self._today_df]
-        combined = pd.concat(frames)
-
-        if combined.empty:
-            return {}
-
-        result = {}
-        for code, group in combined.groupby('stock_code', sort=False):
-            if date in group.index:
-                result[code] = group
-        return result
-
-    def _filter_stock_pool(self, stock_data: Dict[str, pd.DataFrame]) -> Dict[str, pd.DataFrame]:
+    def _filter_stock_pool(self) -> set:
         """过滤股票池（ST、涨跌停、停牌）— 向量化在 _today_df 上。
 
-        只需一次向量化掩码计算，避免逐股迭代 5300 次。
+        返回有效股票代码集合。零 groupby，零逐股迭代。
         """
         if self._today_df.empty:
-            return {}
+            return set()
 
         today = self._today_df
         mask = pd.Series(True, index=today.index)
@@ -684,8 +691,4 @@ class DailyRotationEngine:
         if self.config.exclude_suspended:
             mask &= today['volume'].fillna(0.0) > 0
 
-        valid_codes = set(today.loc[mask, 'stock_code'])
-        if len(valid_codes) == len(stock_data):
-            return stock_data
-
-        return {code: df for code, df in stock_data.items() if code in valid_codes}
+        return set(today.loc[mask, 'stock_code'])

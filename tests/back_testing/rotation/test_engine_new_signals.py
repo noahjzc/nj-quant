@@ -67,9 +67,8 @@ class TestNewFactorExtraction:
         engine._prev_df = pd.DataFrame([row_prev]).set_index('trade_date')
         engine._today_df = pd.DataFrame([row_today]).set_index('trade_date')
 
-        stock_data = engine._get_daily_stock_data(target_date)
-        assert 'sh600001' in stock_data
-        df = stock_data['sh600001']
+        df = engine._get_stock_df('sh600001')
+        assert not df.empty
         row = df.iloc[-1]
 
         val = row.get('circulating_mv', np.nan)
