@@ -219,6 +219,7 @@ __marimo__/
 
 # created by virtualenv automatically
 .idea
+.worktrees/
 
 data/*
 .venvLibsite-packages
