@@ -283,17 +283,8 @@ def objective(trial: optuna.Trial,
         if not results or len(results) < 2:
             return 0.0
 
-        # 5. 构建净值序列: [初始资金, 第1天总资产, 第2天总资产, ...]
-        equity = [config.initial_capital] + [r.total_asset for r in results]
-
-        # 6. 回撤惩罚: 超过 30% 直接淘汰
-        dd = max_drawdown(equity)
-        if dd > MAX_DRAWDOWN_LIMIT:
-            return 0.0
-
-        # 7. 计算目标值: 年化 Sharpe Ratio
-        sharpe = compute_sharpe(equity, periods_per_year=252)
-        return sharpe if not math.isnan(sharpe) else 0.0
+        # 5. 返回最终收益率：(最终总资产 - 初始资金) / 初始资金
+        return (results[-1].total_asset - config.initial_capital) / config.initial_capital
 
     except Exception:
         # Trial 异常不中断整个优化，记录后返回 0
