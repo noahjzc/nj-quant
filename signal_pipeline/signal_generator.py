@@ -29,6 +29,11 @@ class SignalGenerator:
             mode=config.buy_signal_mode,
             kdj_low_threshold=config.kdj_low_threshold,
         )
+        self._sell_filter = SignalFilter(
+            signal_types=config.sell_signal_types,
+            mode='OR',
+            kdj_low_threshold=config.kdj_low_threshold,
+        )
         self._ranker = SignalRanker(
             factor_weights=config.rank_factor_weights,
             factor_directions=config.rank_factor_directions,
@@ -57,6 +62,27 @@ class SignalGenerator:
         # Layer 2: 多因子排序
         ranked = self._rank_candidates(df, candidate_codes, top_n)
         return ranked
+
+    def generate_sell_signals(self, df: pd.DataFrame, trade_date: pd.Timestamp, position_codes: List[str]) -> List[dict]:
+        """
+        在给定日期对持仓股票生成卖出信号
+
+        Args:
+            df: 包含多只股票历史数据的 DataFrame，必须包含 trade_date 列
+            trade_date: 当前交易日
+            position_codes: 当前持仓股票代码列表
+
+        Returns:
+            触发卖出信号的股票列表，每项包含 stock_code 和 reason
+        """
+        sell_signals = []
+        for stock_code in position_codes:
+            stock_df = df[df['stock_code'] == stock_code].copy()
+            if stock_df.empty:
+                continue
+            if self._sell_filter.filter_sell(stock_df, stock_code):
+                sell_signals.append({'stock_code': stock_code, 'reason': 'sell_signal'})
+        return sell_signals
 
     def _scan_buy_candidates(self, df: pd.DataFrame, trade_date: pd.Timestamp) -> List[str]:
         """
