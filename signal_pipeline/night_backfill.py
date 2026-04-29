@@ -184,10 +184,22 @@ def main():
         adj_df["stock_code"] = adj_df["ts_code"].apply(_convert_ts_code)
 
         # Merge daily + basic on stock_code
+        # Map Tushare column names to DB column names
+        column_map = {
+            "turnover_rate": "turnover_rate",
+            "volume_ratio": "volume_ratio",
+            "total_mv": "total_mv",
+            "pe_ttm": "pe_ttm",
+            "ps_ttm": "ps_ttm",
+            "pb": "pb",
+            "circulating_mv": "circulating_mv",
+            "float_mv": "circulating_mv",
+            "circ_mv": "circulating_mv",
+        }
+        ts_to_db = {k: v for k, v in column_map.items() if k in basic_df.columns}
+        select_cols = ["stock_code"] + list(ts_to_db.keys())
         merged = daily_df.merge(
-            basic_df[["stock_code", "turnover_rate", "volume_ratio",
-                      "circulating_mv", "total_mv", "pe_ttm", "ps_ttm",
-                      "pcf_ttm", "pb"]],
+            basic_df[select_cols].rename(columns=ts_to_db),
             on="stock_code",
             how="left",
         )
