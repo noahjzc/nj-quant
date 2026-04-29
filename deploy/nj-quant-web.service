@@ -1,0 +1,15 @@
+[Unit]
+Description=NJ Quant Web Dashboard
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=njquant
+WorkingDirectory=/home/njquant/nj-quant
+EnvironmentFile=/home/njquant/nj-quant/.env
+ExecStart=/home/njquant/nj-quant/.venv/bin/uvicorn web.server.main:app --host 127.0.0.1 --port 8080
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
