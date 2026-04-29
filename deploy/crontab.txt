@@ -1,0 +1,10 @@
+TUSHARE_TOKEN=your_token_here
+
+# 14:25 — Intraday signal generation
+25 14 * * 1-5  cd /home/njquant/nj-quant && .venv/bin/python signal_pipeline/intraday_signal.py >> logs/intraday.log 2>&1
+
+# 18:00 — Night data backfill + cache build
+0 18 * * 1-5  cd /home/njquant/nj-quant && .venv/bin/python signal_pipeline/night_backfill.py >> logs/backfill.log 2>&1
+
+# 09:00 — Web health check
+0 9 * * 1-5  systemctl is-active --quiet nj-quant-web || systemctl restart nj-quant-web
