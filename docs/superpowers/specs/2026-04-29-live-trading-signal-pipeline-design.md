@@ -106,9 +106,10 @@ Tushare 只提供原始 OHLCV + 估值 + 市值，技术指标全部由 `indicat
 
 ### d. 持仓 & 收益
 - 顶部资产总览卡片：总资产 / 可用资金 / 持仓市值 / 累计收益
+- 「补充资金」按钮，弹出表单填入金额，写入资金流水表
 - 当前持仓表：代码/名称/成本价/现价/盈亏%/持有天数
 - 历史交易记录：买入日/卖出日/买入价/卖出价/收益率
-- 基于信号确认自动维护：确认买入 → 新增持仓，确认卖出 → 更新盈亏
+- 基于信号确认自动维护：确认买入 → 扣减可用资金 + 新增持仓，确认卖出 → 增加可用资金 + 更新盈亏
 
 ## New DB Tables
 
@@ -140,6 +141,16 @@ CREATE TABLE position (
     sell_price NUMERIC(10,3),
     profit_pct NUMERIC(10,4),
     status VARCHAR(10) DEFAULT 'OPEN'
+);
+
+CREATE TABLE capital_ledger (
+    id SERIAL PRIMARY KEY,
+    event_type VARCHAR(10) NOT NULL,   -- 'INIT' / 'DEPOSIT' / 'BUY' / 'SELL'
+    amount NUMERIC(15,2) NOT NULL,     -- 正数=入金，负数=出金
+    balance_after NUMERIC(15,2) NOT NULL,
+    related_signal_id INT,
+    note TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE TABLE cron_log (

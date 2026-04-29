@@ -202,9 +202,10 @@ class DailyRotationEngine:
                     return self.daily_results
 
         final_asset = self.daily_results[-1].total_asset if self.daily_results else self.current_capital
+        final_yield_rate = (final_asset / self.config.initial_capital - 1) * 100
         avg_ms = t_total / n_dates * 1000
         fb = f" | 降级:{self._fallback_count}次" if self._fallback_count else ""
-        print(f"{datetime.now():%H:%M:%S} [DailyRotation] 回测完成，最终资产: {final_asset:,.0f} | {avg_ms:.0f}ms/天 | "
+        print(f"{datetime.now():%H:%M:%S} [DailyRotation] 回测完成，最终资产: {final_asset:,.0f} | 总收益率: {final_yield_rate:.2f}% | {avg_ms:.0f}ms/天 | "
               f"stk_df:{n_stock_df_calls}次{t_stock_df*1000:.0f}ms{fb}")
         return self.daily_results
 
