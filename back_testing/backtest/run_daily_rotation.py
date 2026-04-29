@@ -1,15 +1,17 @@
 """每日轮动策略独立运行入口"""
 import argparse
+import json
 import logging
 from back_testing.rotation.daily_rotation_engine import DailyRotationEngine
 from back_testing.rotation.config import RotationConfig, MarketRegimeConfig
 from back_testing.analysis.performance_analyzer import PerformanceAnalyzer
 from back_testing.data.daily_data_cache import DailyDataCache, CachedProvider
+from back_testing.optimization.run_daily_rotation_optimization import _params_to_config
 import pandas as pd
 
 
 def run(start_date: str, end_date: str, config: RotationConfig = None, verbose: bool = False,
-        cache_dir: str = None):
+        cache_dir: str = None, config_file: str = None):
     """运行每日轮动回测"""
     # 配置日志
     level = logging.DEBUG if verbose else logging.INFO
@@ -24,6 +26,12 @@ def run(start_date: str, end_date: str, config: RotationConfig = None, verbose: 
     print(f"区间: {start_date} ~ {end_date}")
     print(f"=" * 60)
 
+    if config_file:
+        with open(config_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        params = data.get('params', data)
+        config = _params_to_config(params)
+        print(f"从配置文件加载: {config_file}")
     config = config or RotationConfig()
     data_provider = None
 
@@ -97,7 +105,9 @@ if __name__ == '__main__':
     parser.add_argument('--cache-dir', default='cache/daily_rotation',
                         help='Parquet 缓存目录（默认: cache/daily_rotation）')
     parser.add_argument('--no-cache', action='store_true', help='不使用缓存（每次从 DB 查询）')
+    parser.add_argument('--config', default=None, help='参数 JSON 文件（如 output/best_params_xxx.json）')
     args = parser.parse_args()
 
     run(args.start, args.end, verbose=args.verbose,
-        cache_dir=None if args.no_cache else args.cache_dir)
+        cache_dir=None if args.no_cache else args.cache_dir,
+        config_file=args.config)
