@@ -28,13 +28,17 @@ def run(start_date: str, end_date: str, config: RotationConfig = None, verbose: 
     data_provider = None
 
     if cache_dir:
-        cache_path = DailyDataCache.build(
-            start_date=start_date,
-            end_date=end_date,
-            cache_dir=cache_dir,
-            benchmark_index=config.benchmark_index,
-        )
-        cache = DailyDataCache(cache_path)
+        from pathlib import Path
+        cache_path = Path(cache_dir)
+        # 如果缓存已存在则直接复用，否则构建
+        if not (cache_path / 'daily').is_dir():
+            cache_path = Path(DailyDataCache.build(
+                start_date=start_date,
+                end_date=end_date,
+                cache_dir=cache_dir,
+                benchmark_index=config.benchmark_index,
+            ))
+        cache = DailyDataCache(str(cache_path))
         data_provider = CachedProvider(cache)
         print(f"数据缓存就绪: {cache_path}")
         print(f"  {len(cache.stock_codes)} 只股票, {len(cache.trading_dates)} 个交易日")
