@@ -545,44 +545,39 @@ class DailyRotationEngine:
         if x <= 0 or not candidates:
             return buy_trades, top_stocks_info
 
-        # 提取候选股因子数据 — 仅对候选股按需构建 DataFrame
-        factor_data_dict = {}
-        for stock_code in candidates:
-            df = self._get_stock_df(stock_code)
-            if df.empty:
-                continue
-            row = df.iloc[-1]
-            factor_row = {}
+        # 向量化提取候选股因子数据 — 从 _today_df 直接构建因子矩阵
+        candidates_df = self._today_df[self._today_df['stock_code'].isin(candidates)]
+        if candidates_df.empty:
+            return buy_trades, top_stocks_info
+        cdf = candidates_df.set_index('stock_code')
+        factor_df = pd.DataFrame(index=cdf.index)
 
-            for factor in self.ranker.factor_weights.keys():
-                if factor == 'RET_20':
-                    factor_row[factor] = float(row.get('ret_20', 0.0) or 0.0)
-                elif factor == 'OVERHEAT':
-                    rsi_val = row.get('rsi_1', np.nan)
-                    ret5 = float(row.get('ret_5', 0.0) or 0.0)
-                    if pd.notna(rsi_val):
-                        factor_row[factor] = compute_overheat(
-                            float(rsi_val), ret5,
-                            self.config.overheat_rsi_threshold,
-                            self.config.overheat_ret5_threshold
-                        )
-                    else:
-                        factor_row[factor] = 0.0
-                elif factor == 'circulating_mv':
-                    val = row.get('circulating_mv', np.nan)
-                    factor_row[factor] = np.log(val) if val > 0 else np.nan
-                elif factor == 'WR_10':
-                    factor_row[factor] = float(row.get('wr_10', np.nan) or 0.0)
-                elif factor == 'WR_14':
-                    factor_row[factor] = float(row.get('wr_14', np.nan) or 0.0)
-                elif factor in row.index:
-                    val = row[factor]
-                    factor_row[factor] = val if val == val else np.nan
-                else:
-                    factor_row[factor] = np.nan
-            factor_data_dict[stock_code] = factor_row
+        for factor in self.ranker.factor_weights.keys():
+            if factor == 'RET_20':
+                factor_df[factor] = cdf['ret_20'].fillna(0.0).astype(float)
+            elif factor == 'OVERHEAT':
+                rsi = cdf['rsi_1']
+                ret5 = cdf['ret_5'].fillna(0.0).astype(float)
+                oh = pd.Series(0.0, index=cdf.index)
+                rsi_t = self.config.overheat_rsi_threshold
+                ret5_t = self.config.overheat_ret5_threshold
+                mask = (rsi > rsi_t) & (ret5 > ret5_t)
+                rsi_c = np.maximum(0.0, (rsi[mask] - rsi_t) / (100 - rsi_t))
+                ret_c = np.minimum(1.0, np.maximum(0.0, (ret5[mask] - ret5_t) / 0.35))
+                oh[mask] = (rsi_c + ret_c) / 2.0
+                factor_df[factor] = oh
+            elif factor == 'circulating_mv':
+                mv = cdf['circulating_mv']
+                factor_df[factor] = np.where(mv > 0, np.log(mv), np.nan)
+            elif factor == 'WR_10':
+                factor_df[factor] = cdf['wr_10'].fillna(0.0).astype(float)
+            elif factor == 'WR_14':
+                factor_df[factor] = cdf['wr_14'].fillna(0.0).astype(float)
+            elif factor in cdf.columns:
+                factor_df[factor] = cdf[factor]
+            else:
+                factor_df[factor] = np.nan
 
-        factor_df = pd.DataFrame(factor_data_dict).T
         factor_df = factor_df.fillna(0)
         ranked = self.ranker.rank(factor_df, top_n=x)
 
