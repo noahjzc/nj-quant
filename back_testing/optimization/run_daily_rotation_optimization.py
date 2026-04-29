@@ -277,7 +277,7 @@ def objective(trial: optuna.Trial,
         # 2. 创建引擎并运行完整回测
         engine = DailyRotationEngine(config, start_date, end_date,
                                      data_provider=data_provider)
-        results = engine.run()
+        results = engine.run(trial=trial)
 
         # 4. 结果不足 → 返回 0（数据不够或回测失败）
         if not results or len(results) < 2:
