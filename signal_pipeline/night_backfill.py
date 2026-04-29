@@ -117,6 +117,11 @@ def _cron_finish(session, log_id: int, status: str, error_message: str = None):
     session.commit()
 
 
+def _get_engine():
+    from back_testing.data.db.connection import get_engine as _ge
+    return _ge()
+
+
 def _get_previous_trading_day() -> date:
     """Return the previous trading day (weekday, backfill at 18:00)."""
     today = date.today()
@@ -338,6 +343,106 @@ def main():
         sys.exit(1)
     finally:
         session.close()
+
+
+def _backfill_single_day(target_date: date, token: str) -> tuple[bool, int, str | None]:
+    """单日补全逻辑（不写 Parquet，不写 cron_log）。
+
+    Returns:
+        (success, rows_written, error_message)
+    """
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    from back_testing.data.db.models import StockDaily
+
+    client = TushareClient(token)
+    tushare_date = target_date.strftime("%Y%m%d")
+
+    try:
+        daily_df = client.get_daily_all(tushare_date)
+        if daily_df.empty:
+            return False, 0, f"Tushare daily returned empty for {tushare_date}"
+
+        basic_df = client.get_daily_basic_all(tushare_date)
+        adj_df = client.get_adj_factor_all(tushare_date)
+
+        if basic_df.empty:
+            logger.warning(f"daily_basic returned empty for {tushare_date}")
+        if adj_df.empty:
+            logger.warning(f"adj_factor returned empty for {tushare_date}")
+
+        # Convert ts_code → stock_code
+        daily_df["stock_code"] = daily_df["ts_code"].apply(_convert_ts_code)
+        basic_df["stock_code"] = basic_df["ts_code"].apply(_convert_ts_code)
+        adj_df["stock_code"] = adj_df["ts_code"].apply(_convert_ts_code)
+
+        # Merge
+        merged = daily_df.merge(
+            basic_df[["stock_code", "turnover_rate", "volume_ratio",
+                      "circulating_mv", "total_mv", "pe_ttm", "ps_ttm", "pcf_ttm", "pb"]],
+            on="stock_code", how="left",
+        )
+        adj_latest = adj_df.sort_values("trade_date").groupby("stock_code", sort=False).last().reset_index()
+        merged = merged.merge(adj_latest[["stock_code", "adj_factor"]], on="stock_code", how="left")
+
+        # 后复权
+        merged["adj_close"] = merged["close"] * merged["adj_factor"]
+        merged = merged.sort_values(["stock_code", "trade_date"])
+        merged["prev_adj_close"] = merged.groupby("stock_code")["adj_close"].shift(1)
+
+        # 计算指标
+        for col in ["stock_code", "trade_date", "open", "high", "low", "close", "volume"]:
+            if col not in merged.columns:
+                return False, 0, f"Missing required column: {col}"
+        merged["trade_date"] = pd.to_datetime(merged["trade_date"])
+        merged = merged.sort_values(["stock_code", "trade_date"])
+        merged = IndicatorCalculator.calculate_all(merged)
+
+        # 准备字段
+        merged["amplitude"] = (merged["high"] - merged["low"]) / merged["low"] * 100
+        merged["change_pct"] = merged["pct_chg"]
+        merged["limit_up"] = merged["pct_chg"] >= 9.9
+        merged["limit_down"] = merged["pct_chg"] <= -9.9
+
+        # 写 DB
+        record_cols = [
+            "stock_code", "trade_date", "open", "high", "low", "close", "volume",
+            "turnover_amount", "adj_close", "prev_adj_close", "amplitude", "change_pct",
+            "turnover_rate", "volume_ratio", "circulating_mv", "total_mv",
+            "limit_up", "limit_down", "pe_ttm", "ps_ttm", "pcf_ttm", "pb",
+            "ma_5", "ma_10", "ma_20", "ma_30", "ma_60", "ma_cross",
+            "macd_dif", "macd_dea", "macd_hist", "macd_cross",
+            "kdj_k", "kdj_d", "kdj_j", "kdj_cross",
+            "boll_mid", "boll_upper", "boll_lower",
+            "psy", "psyma", "rsi_1", "rsi_2", "rsi_3",
+        ]
+        available_cols = [c for c in record_cols if c in merged.columns]
+        db_df = merged[available_cols].copy()
+        for col in db_df.columns:
+            if col in ("stock_code", "trade_date", "ma_cross", "macd_cross", "kdj_cross"):
+                continue
+            db_df[col] = db_df[col].apply(_na_to_none)
+        db_df["trade_date"] = pd.to_datetime(db_df["trade_date"]).dt.strftime("%Y-%m-%d")
+
+        engine = _get_engine()
+        with engine.begin() as conn:
+            for record in db_df.to_dict("records"):
+                record_copy = dict(record)
+                stock_code = record_copy.pop("stock_code")
+                trade_date = record_copy.pop("trade_date")
+                insert_data = {k: v for k, v in record_copy.items() if hasattr(StockDaily, k)}
+                insert_data["stock_code"] = stock_code
+                insert_data["trade_date"] = trade_date
+                stmt = pg_insert(StockDaily).values(**insert_data)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["stock_code", "trade_date"],
+                    set_=insert_data,
+                )
+                conn.execute(stmt)
+
+        return True, len(db_df), None
+
+    except Exception as e:
+        return False, 0, str(e)
 
 
 if __name__ == "__main__":
