@@ -692,7 +692,8 @@ class DailyRotationEngine:
 
         不再累积历史数据，不再 concat。每天只读一个 Parquet 文件。
         """
-        self._prev_df = self._today_df
+        if not self._today_df.empty:
+            self._prev_df = self._today_df
 
         date_str = date.strftime('%Y-%m-%d')
         day_df = self.data_provider.get_daily_dataframe(date_str)
