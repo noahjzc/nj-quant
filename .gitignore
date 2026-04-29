@@ -219,10 +219,13 @@ __marimo__/
 
 # created by virtualenv automatically
 .idea
+.worktrees/
 
 data/*
 .venvLibsite-packages
 back_testing/results/*
+results/*
+output/*
 
 # Database configuration (contains credentials)
 back_testing/config/database.ini

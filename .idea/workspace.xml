@@ -4,11 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="ba9c56f9-9fae-4e2f-bc58-82725a66fec3" name="Changes" comment="refactor(data): 优化日线数据缓存加载策略以避免内存溢出&#10;&#10;- 将一次性全量加载改为按日分批查询写入&#10;- 每日期数据单独查询后立即释放内存，避免OOM问题&#10;- 实现增量构建机制，已存在的daily文件自动跳过&#10;- 重构缓存目录结构为平坦结构，daily文件直接写入{cache_dir}/daily/&#10;- 更新交易日列表生成逻辑，从已缓存文件收集而非数据库查询&#10;- 将日志输出方式从logger改为print，优化进度显示&#10;- 添加详细的函数文档说明新的加载策略和缓存复用机制">
-      <change beforePath="$PROJECT_DIR$/.claude/settings.local.json" beforeDir="false" afterPath="$PROJECT_DIR$/.claude/settings.local.json" afterDir="false" />
+    <list default="true" id="ba9c56f9-9fae-4e2f-bc58-82725a66fec3" name="Changes" comment="feat(rotation): 添加新股过滤和创业板涨跌幅调整功能&#10;&#10;- 在配置中新增 exclude_new_stocks 选项用于过滤新股&#10;- 修改股票池过滤逻辑支持按日期判断创业板涨跌幅限制&#10;- 2020年8月24日后创业板涨跌幅从10%放宽至20%&#10;- 更新Optuna优化器支持study名称配置和存在时加载&#10;- 优化回测性能并改进缓存机制减少数据库查询">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/backtest/run_daily_rotation.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/backtest/run_daily_rotation.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/optimization/run_daily_rotation_optimization.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/optimization/run_daily_rotation_optimization.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/rotation/daily_rotation_engine.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/rotation/daily_rotation_engine.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -23,10 +21,16 @@
     </option>
   </component>
   <component name="Git.Settings">
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="main" />
+      </map>
+    </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
   <component name="HighlightingSettingsPerFile">
     <setting file="file://$USER_HOME$/AppData/Local/JetBrains/PyCharm2025.1/python_stubs/-2115902539/builtins.py" root0="SKIP_INSPECTION" />
+    <setting file="file://$PROJECT_DIR$/.venv/Lib/site-packages/optuna/study/study.py" root0="SKIP_INSPECTION" />
     <setting file="file://$PROJECT_DIR$/.venv/Lib/site-packages/pandas/core/frame.py" root0="SKIP_INSPECTION" />
   </component>
   <component name="ProjectColorInfo">{
@@ -47,8 +51,8 @@
     "Python.run_optimization.executor": "Debug",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "main",
-    "last_opened_file_path": "D:/workspace/code/mine/quant/nj-quant",
+    "git-widget-placeholder": "dev",
+    "last_opened_file_path": "D:/workspace/code/mine/quant/nj-quant/output",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
@@ -60,6 +64,7 @@
 }]]></component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
+      <recent name="D:\workspace\code\mine\quant\nj-quant\output" />
       <recent name="D:\workspace\code\mine\quant\nj-quant" />
       <recent name="D:\workspace\code\mine\quant\nj-quant\fetch_data" />
     </key>
@@ -222,7 +227,8 @@
       <workItem from="1777098761029" duration="1704000" />
       <workItem from="1777102338388" duration="26350000" />
       <workItem from="1777296730598" duration="456000" />
-      <workItem from="1777298314034" duration="18204000" />
+      <workItem from="1777298314034" duration="24825000" />
+      <workItem from="1777432338560" duration="15415000" />
     </task>
     <task id="LOCAL-00001" summary="init">
       <option name="closed" value="true" />
@@ -280,7 +286,23 @@
       <option name="project" value="LOCAL" />
       <updated>1777352380625</updated>
     </task>
-    <option name="localTasksCounter" value="8" />
+    <task id="LOCAL-00008" summary="perf(data): 优化回测性能并改进缓存机制&#10;&#10;- 实现 DailyDataCache 和 CachedProvider 替代实时数据库查询&#10;- 添加预加载缓存机制将30天历史数据打包为单个Parquet文件&#10;- 避免每个Trial重复读取30+个日文件，显著提升并行优化速度&#10;- 支持命令行参数配置缓存目录和禁用缓存选项&#10;- 重构优化目标函数以利用缓存数据提供器&#10;- 添加详细的算法说明文档和参数采样策略注释">
+      <option name="closed" value="true" />
+      <created>1777387406276</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1777387406276</updated>
+    </task>
+    <task id="LOCAL-00009" summary="feat(rotation): 添加新股过滤和创业板涨跌幅调整功能&#10;&#10;- 在配置中新增 exclude_new_stocks 选项用于过滤新股&#10;- 修改股票池过滤逻辑支持按日期判断创业板涨跌幅限制&#10;- 2020年8月24日后创业板涨跌幅从10%放宽至20%&#10;- 更新Optuna优化器支持study名称配置和存在时加载&#10;- 优化回测性能并改进缓存机制减少数据库查询">
+      <option name="closed" value="true" />
+      <created>1777454449268</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1777454449268</updated>
+    </task>
+    <option name="localTasksCounter" value="10" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -304,7 +326,9 @@
     <MESSAGE value="fix(config): 清理合并冲突标记并更新IDE配置&#10;&#10;- 移除 .gitignore 文件中的合并冲突标记&#10;- 更新 .idea/workspace.xml 中的变更列表记录&#10;- 修复 PropertiesComponent 的 JSON 格式化问题&#10;- 添加新的工作时间追踪记录" />
     <MESSAGE value="fix(config): 清理合并冲突标记并更新IDE配置&#10;&#10;- 移除 .gitignore 文件中的合并冲突标记&#10;- 更新 .idea/workspace.xml 中的变更列表记录&#10;- 修复 PropertiesComponent 的 JSON 格式化问题&#10;- 添加新的工作时间追踪记录&#10;- 移除临时输出文件 ga_output.txt 和 ga_output_utf8.txt&#10;- 删除进度日志文件 progress.md 和任务计划文件 task_plan.md&#10;- 添加数据迁移脚本 migrate_to_ecs.sh&#10;- 添加 Optuna 仪表板服务配置文件&#10;- 添加服务器初始化 SQL 脚本&#10;- 添加服务器表结构创建脚本" />
     <MESSAGE value="refactor(data): 优化日线数据缓存加载策略以避免内存溢出&#10;&#10;- 将一次性全量加载改为按日分批查询写入&#10;- 每日期数据单独查询后立即释放内存，避免OOM问题&#10;- 实现增量构建机制，已存在的daily文件自动跳过&#10;- 重构缓存目录结构为平坦结构，daily文件直接写入{cache_dir}/daily/&#10;- 更新交易日列表生成逻辑，从已缓存文件收集而非数据库查询&#10;- 将日志输出方式从logger改为print，优化进度显示&#10;- 添加详细的函数文档说明新的加载策略和缓存复用机制" />
-    <option name="LAST_COMMIT_MESSAGE" value="refactor(data): 优化日线数据缓存加载策略以避免内存溢出&#10;&#10;- 将一次性全量加载改为按日分批查询写入&#10;- 每日期数据单独查询后立即释放内存，避免OOM问题&#10;- 实现增量构建机制，已存在的daily文件自动跳过&#10;- 重构缓存目录结构为平坦结构，daily文件直接写入{cache_dir}/daily/&#10;- 更新交易日列表生成逻辑，从已缓存文件收集而非数据库查询&#10;- 将日志输出方式从logger改为print，优化进度显示&#10;- 添加详细的函数文档说明新的加载策略和缓存复用机制" />
+    <MESSAGE value="perf(data): 优化回测性能并改进缓存机制&#10;&#10;- 实现 DailyDataCache 和 CachedProvider 替代实时数据库查询&#10;- 添加预加载缓存机制将30天历史数据打包为单个Parquet文件&#10;- 避免每个Trial重复读取30+个日文件，显著提升并行优化速度&#10;- 支持命令行参数配置缓存目录和禁用缓存选项&#10;- 重构优化目标函数以利用缓存数据提供器&#10;- 添加详细的算法说明文档和参数采样策略注释" />
+    <MESSAGE value="feat(rotation): 添加新股过滤和创业板涨跌幅调整功能&#10;&#10;- 在配置中新增 exclude_new_stocks 选项用于过滤新股&#10;- 修改股票池过滤逻辑支持按日期判断创业板涨跌幅限制&#10;- 2020年8月24日后创业板涨跌幅从10%放宽至20%&#10;- 更新Optuna优化器支持study名称配置和存在时加载&#10;- 优化回测性能并改进缓存机制减少数据库查询" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat(rotation): 添加新股过滤和创业板涨跌幅调整功能&#10;&#10;- 在配置中新增 exclude_new_stocks 选项用于过滤新股&#10;- 修改股票池过滤逻辑支持按日期判断创业板涨跌幅限制&#10;- 2020年8月24日后创业板涨跌幅从10%放宽至20%&#10;- 更新Optuna优化器支持study名称配置和存在时加载&#10;- 优化回测性能并改进缓存机制减少数据库查询" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>

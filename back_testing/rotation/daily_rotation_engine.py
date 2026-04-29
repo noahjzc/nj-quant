@@ -1,7 +1,9 @@
 """每日全市场轮动回测核心引擎"""
+import time
 import pandas as pd
 import numpy as np
 import logging
+import optuna
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime
@@ -27,7 +29,6 @@ def compute_overheat(
     return (rsi_component + ret_component) / 2.0
 from back_testing.rotation.signal_engine.signal_filter import SignalFilter
 from back_testing.rotation.signal_engine.signal_ranker import SignalRanker
-from back_testing.factors.factor_utils import FactorProcessor
 from back_testing.rotation.market_regime import MarketRegime
 from back_testing.rotation.position_manager import RotationPositionManager
 from back_testing.rotation.trade_executor import TradeExecutor, TradeRecord
@@ -69,18 +70,23 @@ class DailyRotationEngine:
     6. 记录每日净值和交易
     """
 
-    PRELOAD_DAYS = 30
-    MIN_TRADING_DAYS = 20
-
     def __init__(self, config: RotationConfig, start_date: str, end_date: str,
-                 data_provider=None, preloaded_cache=None):
-        """preloaded_cache: Dict[str, DataFrame] 或 master DataFrame，均可"""
+                 data_provider=None):
+        """Initialize engine with rolling pointer data model.
+
+        Args:
+            config: Strategy configuration.
+            start_date / end_date: Backtest date range (YYYY-MM-DD).
+            data_provider: Data source (CachedProvider with precomputed columns required).
+        """
         self.config = config
         self.start_date = start_date
         self.end_date = end_date
 
+        # ── Data source ──
         self.data_provider = data_provider or DataProvider()
-        self._preloaded_cache = preloaded_cache
+
+        # ── Subsystems ──
         self.position_manager = RotationPositionManager(
             total_capital=config.initial_capital,
             max_total_pct=config.max_total_pct,
@@ -90,63 +96,117 @@ class DailyRotationEngine:
         self.buy_filter = SignalFilter(config.buy_signal_types, mode=config.buy_signal_mode,
                                         kdj_low_threshold=config.kdj_low_threshold)
         self.sell_filter = SignalFilter(config.sell_signal_types)
-        # ATR 止损止盈参数
+        self.ranker = SignalRanker(config.rank_factor_weights, config.rank_factor_directions)
+        self.market_regime = MarketRegime(config.market_regime, self.data_provider)
+
+        # ── ATR stop parameters ──
         self.atr_period = config.atr_period
         self.stop_loss_mult = config.stop_loss_mult
         self.take_profit_mult = config.take_profit_mult
         self.trailing_pct = config.trailing_pct
         self.trailing_start = config.trailing_start
-        self.ranker = SignalRanker(config.rank_factor_weights, config.rank_factor_directions)
-        self.market_regime = MarketRegime(config.market_regime, self.data_provider)
-        # CachedProvider 有 get_daily_dataframe 优化路径
-        self._has_fast_daily = hasattr(self.data_provider, 'get_daily_dataframe')
 
-        # 缓存全市场股票列表（避免每日重复查询）
-        self._all_codes = self.data_provider.get_all_stock_codes()
-
-        # 状态
+        # ── Runtime state ──
         self.current_capital = config.initial_capital
-        self.positions: Dict[str, Position] = {}  # stock_code -> Position
+        self.positions: Dict[str, Position] = {}
         self.daily_results: List[DailyResult] = []
         self.trade_history: List[TradeRecord] = []
-        self._cache_df: pd.DataFrame = pd.DataFrame()  # master DataFrame: trade_date 索引, stock_code 列
 
-    def run(self) -> List[DailyResult]:
-        """运行回测"""
+        # ── Rolling pointer: prev/current day DataFrames (~4760 rows each) ──
+        self._prev_df: pd.DataFrame = pd.DataFrame()
+        self._today_df: pd.DataFrame = pd.DataFrame()
+
+        # ── Diagnostic counters ──
+        self._n_stock_df_calls = 0
+        self._fallback_count = 0
+
+    def run(self, trial=None) -> List[DailyResult]:
+        """Run the backtest main loop.
+
+        Flow:
+        1. Get trading dates from benchmark index.
+        2. Initialize _prev_df from the trading day before first_date.
+        3. For each date: advance data pointer → run single day logic → record results.
+
+        Args:
+            trial: Optional Optuna Trial for early pruning. When provided and
+                   total_asset falls below min_asset_ratio, raises TrialPruned.
+        """
         dates = self._get_trading_dates()
         n_dates = len(dates)
         if n_dates < 2:
             return []
 
-        # 一次性加载全市场历史数据（避免每日N+1查询）
-        if self._preloaded_cache is not None:
-            if isinstance(self._preloaded_cache, pd.DataFrame):
-                self._cache_df = self._preloaded_cache
-            else:
-                # dict 格式 → master DataFrame
-                frames = [df for df in self._preloaded_cache.values() if not df.empty]
-                self._cache_df = pd.concat(frames) if frames else pd.DataFrame()
-            self._preloaded_cache = None  # 释放引用
-        else:
-            self._preload_histories(dates[0])
+        # Initialize _prev_df: load trading day just before first_date
+        self._init_prev_cache(dates[0])
 
         now = datetime.now
-        n_codes = self._cache_df['stock_code'].nunique() if not self._cache_df.empty else 0
-        print(f"{now():%H:%M:%S} [DailyRotation] {self.start_date} ~ {self.end_date}, {n_dates}天, {n_codes}只")
+        print(f"{now():%H:%M:%S} [DailyRotation] {self.start_date} ~ {self.end_date}, {n_dates}天")
 
+        # ── Timing diagnostics ──
+        t_total = 0.0
+        t_advance = 0.0
+        t_regime = 0.0
+        t_filter = 0.0
+        t_get_prices = 0.0
+        t_check_sell = 0.0
+        t_scan_buy = 0.0
+        t_execute_buy = 0.0
+        t_stock_df = 0.0
+        n_stock_df_calls = 0
+
+        # ── Day-by-day loop ──
         for i, date in enumerate(dates):
             date_str = date.strftime('%Y-%m-%d')
             if i == 0 or (i + 1) % 10 == 0:
                 prev_asset = self.daily_results[-1].total_asset if self.daily_results else self.config.initial_capital
-                print(f"{now():%H:%M:%S}   [{i+1}/{n_dates}] {date_str} | 持仓:{len(self.positions)} | 资产:{prev_asset:,.0f}")
+                if i > 0:
+                    avg_day = t_total / i * 1000
+                    fb = f" FB:{self._fallback_count}" if self._fallback_count else ""
+                    print(f"{now():%H:%M:%S}   [{i+1}/{n_dates}] {date_str} | 持仓:{len(self.positions)} | 资产:{prev_asset:,.0f} | "
+                          f"avg:{avg_day:.0f}ms/d | adv:{t_advance*1000:.0f}ms reg:{t_regime*1000:.0f}ms "
+                          f"filt:{t_filter*1000:.0f}ms prc:{t_get_prices*1000:.0f}ms "
+                          f"sell:{t_check_sell*1000:.0f}ms scan:{t_scan_buy*1000:.0f}ms buy:{t_execute_buy*1000:.0f}ms "
+                          f"stk:{t_stock_df*1000:.0f}ms({n_stock_df_calls}){fb}")
+                else:
+                    print(f"{now():%H:%M:%S}   [{i+1}/{n_dates}] {date_str} | 持仓:{len(self.positions)} | 资产:{prev_asset:,.0f}")
 
-            # 推进到当日：追加当日全市场数据到 master DataFrame（1 次 concat）
+            t0 = time.perf_counter()
             self._advance_to_date(date)
-            result = self._run_single_day(date)
+            t_advance += time.perf_counter() - t0
+
+            t0 = time.perf_counter()
+            result, day_stats = self._run_single_day(date)
+            t_total += time.perf_counter() - t0
+
+            t_regime += day_stats.get('regime', 0)
+            t_filter += day_stats.get('filter', 0)
+            t_get_prices += day_stats.get('get_prices', 0)
+            t_check_sell += day_stats.get('check_sell', 0)
+            t_scan_buy += day_stats.get('scan_buy', 0)
+            t_execute_buy += day_stats.get('execute_buy', 0)
+            t_stock_df += day_stats.get('stock_df', 0)
+            n_stock_df_calls += day_stats.get('n_stock_df', 0)
+
             self.daily_results.append(result)
 
+            # Early termination: total_asset below min_asset_ratio * initial_capital
+            if result.total_asset < self.config.initial_capital * self.config.min_asset_ratio:
+                if trial is not None:
+                    trial.report(result.total_asset / self.config.initial_capital, i)
+                    raise optuna.TrialPruned(
+                        f"第{i+1}天资产 {result.total_asset:,.0f} < "
+                        f"初始 {self.config.initial_capital * self.config.min_asset_ratio:,.0f}"
+                    )
+                else:
+                    return self.daily_results
+
         final_asset = self.daily_results[-1].total_asset if self.daily_results else self.current_capital
-        print(f"{datetime.now():%H:%M:%S} [DailyRotation] 回测完成，最终资产: {final_asset:,.0f}")
+        final_yield_rate = (final_asset / self.config.initial_capital - 1) * 100
+        avg_ms = t_total / n_dates * 1000
+        fb = f" | 降级:{self._fallback_count}次" if self._fallback_count else ""
+        print(f"{datetime.now():%H:%M:%S} [DailyRotation] 回测完成，最终资产: {final_asset:,.0f} | 总收益率: {final_yield_rate:.2f}% | {avg_ms:.0f}ms/天 | "
+              f"stk_df:{n_stock_df_calls}次{t_stock_df*1000:.0f}ms{fb}")
         return self.daily_results
 
     def _log_daily_summary(
@@ -173,26 +233,35 @@ class DailyRotationEngine:
             top_codes = [s['stock_code'] for s in top_stocks_info]
             logger.info(f"[TOP] 买入候选排名: {top_codes}")
 
-    def _run_single_day(self, date: pd.Timestamp) -> DailyResult:
-        """每日流程"""
+    def _run_single_day(self, date: pd.Timestamp):
+        """每日流程。返回 (DailyResult, day_stats_dict)。"""
         date_str = date.strftime('%Y-%m-%d')
+        stats = {}  # 累积当日各子操作耗时
 
         # Step 0: 获取大盘状态，动态调整参数
+        t0 = time.perf_counter()
         regime_name, regime_params = self.market_regime.get_regime(date)
+        stats['regime'] = time.perf_counter() - t0
+
         self.position_manager.max_total_pct = regime_params.max_total_pct
         self.position_manager.max_position_pct = regime_params.max_position_pct
         max_positions = regime_params.max_positions
 
-        # 获取当日全市场日线
-        stock_data = self._get_daily_stock_data(date)
-        if not stock_data:
-            return DailyResult(date_str, self.current_capital, self.current_capital, self.positions, [], regime_name, self.current_capital)
+        # 当日无数据 → 返回空结果
+        if self._today_df.empty:
+            stats.update({'filter': 0, 'get_prices': 0, 'check_sell': 0,
+                          'scan_buy': 0, 'execute_buy': 0, 'stock_df': 0, 'n_stock_df': 0})
+            return DailyResult(date_str, self.current_capital, self.current_capital, self.positions, [], regime_name, self.current_capital), stats
 
-        # 过滤股票池
-        filtered_data = self._filter_stock_pool(stock_data)
+        # 过滤股票池（向量化在 _today_df 上）
+        t0 = time.perf_counter()
+        valid_codes = self._filter_stock_pool(date)
+        stats['filter'] = time.perf_counter() - t0
 
-        # 获取持仓快照（代码→当前价）
-        current_prices = {code: df['close'].iloc[-1] for code, df in filtered_data.items() if not df.empty}
+        # 获取持仓快照（代码→当前价）— 从 _today_df 直接读取，零 groupby
+        t0 = time.perf_counter()
+        current_prices = self._get_current_prices(valid_codes)
+        stats['get_prices'] = time.perf_counter() - t0
 
         # Step 1: 更新持仓期间最高价
         for stock_code, position in self.positions.items():
@@ -201,7 +270,11 @@ class DailyRotationEngine:
                 position.highest_price = current_price
 
         # Step 2: 检查持仓卖出信号
-        sell_trades = self._check_and_sell(date_str, filtered_data, current_prices)
+        t_stock_start = time.perf_counter()
+        n_stock_before = self._n_stock_df_calls if hasattr(self, '_n_stock_df_calls') else 0
+        t0 = time.perf_counter()
+        sell_trades = self._check_and_sell(date_str, valid_codes, current_prices)
+        stats['check_sell'] = time.perf_counter() - t0
 
         # 更新现金（卖出）
         for trade in sell_trades:
@@ -209,7 +282,9 @@ class DailyRotationEngine:
 
         # Step 2: 扫描买入信号（排除当日已卖出的股票，防止同日来回交易）
         sold_today = [t.stock_code for t in sell_trades]
-        buy_candidates = self._scan_buy_candidates(filtered_data, exclude_codes=sold_today)
+        t0 = time.perf_counter()
+        buy_candidates = self._scan_buy_candidates(valid_codes, exclude_codes=sold_today)
+        stats['scan_buy'] = time.perf_counter() - t0
 
         # Step 3: 重新计算 total_asset（此时包含卖出后的现金更新）
         total_asset = self.current_capital + self.position_manager.get_position_value(
@@ -219,7 +294,14 @@ class DailyRotationEngine:
         self.position_manager.update_capital(total_asset)
 
         # Step 4: 多因子排序，买入 TOP X
-        buy_trades, top_stocks_info = self._execute_buy(date_str, filtered_data, buy_candidates, max_positions, current_prices, total_asset)
+        t0 = time.perf_counter()
+        buy_trades, top_stocks_info = self._execute_buy(date_str, valid_codes, buy_candidates, max_positions, current_prices, total_asset)
+        stats['execute_buy'] = time.perf_counter() - t0
+
+        # 统计当日 _get_stock_df 调用次数与耗时
+        n_stock_after = self._n_stock_df_calls if hasattr(self, '_n_stock_df_calls') else 0
+        stats['n_stock_df'] = n_stock_after - n_stock_before
+        stats['stock_df'] = time.perf_counter() - t_stock_start - stats['check_sell'] - stats['scan_buy'] - stats['execute_buy']
 
         all_trades = sell_trades + buy_trades
 
@@ -241,54 +323,54 @@ class DailyRotationEngine:
             trades=all_trades,
             market_regime=regime_name,
             portfolio_value=total_asset
-        )
+        ), stats
 
     def _check_and_sell(
         self,
         date_str: str,
-        stock_data: Dict[str, pd.DataFrame],
+        valid_codes: set,
         current_prices: Dict[str, float]
     ) -> List[TradeRecord]:
-        """检查持仓是否有卖出信号"""
+        """检查持仓是否有卖出信号 — 仅在持仓股上按需构建 DataFrame"""
         sell_trades = []
         positions_to_close = []
 
         for stock_code, position in list(self.positions.items()):
-            if stock_code not in stock_data:
-                # 停牌股：无法获取当日价格，从 master 缓存中取最后一日收盘价平仓
-                if stock_code in self._cache_df['stock_code'].values:
-                    df_cached = self._cache_df[self._cache_df['stock_code'] == stock_code].sort_index()
-                    if not df_cached.empty:
-                        price = df_cached['close'].iloc[-1]
-                    if price > 0:
-                        shares, cost = self.trade_executor.execute_sell(stock_code, price, position.shares)
-                        if shares > 0:
-                            buy_price = position.buy_price
-                            holding_days = (pd.Timestamp(date_str) - pd.Timestamp(position.buy_date)).days
-                            return_pct = (price - buy_price) / buy_price * 100 if buy_price > 0 else 0
-                            pnl = (price - buy_price) * shares - cost
-                            capital_before_sell = self.current_capital
+            df = self._get_stock_df(stock_code)
+            if stock_code not in valid_codes:
+                # 停牌/退市：从 prev 缓存取最后收盘价平仓
+                price = 0.0
+                if not df.empty:
+                    price = float(df['close'].iloc[-1])
+                if price > 0:
+                    shares, cost = self.trade_executor.execute_sell(stock_code, price, position.shares)
+                    if shares > 0:
+                        buy_price = position.buy_price
+                        holding_days = (pd.Timestamp(date_str) - pd.Timestamp(position.buy_date)).days
+                        return_pct = (price - buy_price) / buy_price * 100 if buy_price > 0 else 0
+                        pnl = (price - buy_price) * shares - cost
+                        capital_before_sell = self.current_capital
 
-                            trade = TradeRecord(
-                                date=date_str,
-                                stock_code=stock_code,
-                                action='SELL',
-                                price=price,
-                                shares=shares,
-                                cost=cost,
-                                capital_before=capital_before_sell
-                            )
-                            sell_trades.append(trade)
-                            self.trade_history.append(trade)
-                            del self.positions[stock_code]
+                        trade = TradeRecord(
+                            date=date_str,
+                            stock_code=stock_code,
+                            action='SELL',
+                            price=price,
+                            shares=shares,
+                            cost=cost,
+                            capital_before=capital_before_sell
+                        )
+                        sell_trades.append(trade)
+                        self.trade_history.append(trade)
+                        del self.positions[stock_code]
 
-                            logger.info(
-                                f"[SELL/SUSPENDED] {date_str} {stock_code} @ {price:.3f} x {shares}股 "
-                                f"买价:{buy_price:.3f} 持有:{holding_days}天 收益:{return_pct:+.2f}% "
-                                f"PnL:{pnl:+,.0f} (卖前现金:{capital_before_sell:,.0f})"
-                            )
+                        logger.info(
+                            f"[SELL/SUSPENDED] {date_str} {stock_code} @ {price:.3f} x {shares}股 "
+                            f"买价:{buy_price:.3f} 持有:{holding_days}天 收益:{return_pct:+.2f}% "
+                            f"PnL:{pnl:+,.0f} (卖前现金:{capital_before_sell:,.0f})"
+                        )
                 continue
-            df = stock_data[stock_code]
+
             if df.empty or len(df) < 2:
                 continue
 
@@ -299,10 +381,7 @@ class DailyRotationEngine:
             # ATR 止损/止盈/移动止损检查
             current_price = current_prices.get(stock_code, 0.0)
             if current_price > 0:
-                try:
-                    atr = StopLossStrategies.calculate_atr(df, period=self.atr_period)
-                except Exception:
-                    atr = 0.0
+                atr = float(df['atr_14'].iloc[-1]) if 'atr_14' in df.columns else 0.0
                 if atr > 0:
                     exit_result = StopLossStrategies.check_exit(
                         position={'buy_price': position.buy_price},
@@ -358,10 +437,10 @@ class DailyRotationEngine:
 
         return sell_trades
 
-    def _scan_buy_candidates(self, stock_data: Dict[str, pd.DataFrame], exclude_codes: List[str] = None) -> List[str]:
+    def _scan_buy_candidates(self, valid_codes: set, exclude_codes: List[str] = None) -> List[str]:
         """扫描全市场，返回有买入信号的股票代码（向量化）"""
         exclude_set = set(exclude_codes) if exclude_codes else set()
-        codes = [c for c in stock_data if c not in self.positions and c not in exclude_set]
+        codes = [c for c in valid_codes if c not in self.positions and c not in exclude_set]
         if not codes:
             return []
 
@@ -369,10 +448,13 @@ class DailyRotationEngine:
         try:
             features = self._build_signal_features(codes)
         except Exception:
-            # 回退到逐股检测
+            # 回退到逐股检测 — 极慢（每只股票 ~0.1ms × N）
+            self._fallback_count = getattr(self, '_fallback_count', 0) + 1
+            if self._fallback_count <= 3:
+                logger.warning(f"[SLOW-PATH] _build_signal_features 失败，降级到逐股检测 ({len(codes)} 只股票)")
             candidates = []
             for stock_code in codes:
-                df = stock_data[stock_code]
+                df = self._get_stock_df(stock_code)
                 if df.empty or len(df) < 2:
                     continue
                 if self.buy_filter.filter_buy(df, stock_code):
@@ -424,59 +506,50 @@ class DailyRotationEngine:
         return combined[combined].index.tolist()
 
     def _build_signal_features(self, stock_codes: List[str]) -> pd.DataFrame:
-        """从 master 缓存构建信号特征矩阵（只取每只股票最近 21 行，避免对全量历史做 transform）"""
-        mask = self._cache_df['stock_code'].isin(stock_codes)
-        hist = self._cache_df[mask]
+        """从 _today_df / _prev_df 直接提取预计算列，组装特征矩阵。
 
-        if hist.empty:
+        零 groupby，零 rolling，零 sort_values。
+        所有技术指标已在缓存构建时预计算好。
+        """
+        if self._today_df.empty:
             return pd.DataFrame()
 
-        # 按 (stock_code, trade_date) 排序
-        hist = hist.sort_values(['stock_code', self._cache_df.index.name])
+        # Filter to relevant stocks
+        today = self._today_df[self._today_df['stock_code'].isin(stock_codes)]
+        prev = self._prev_df[self._prev_df['stock_code'].isin(stock_codes)]
 
-        # 每只股票只保留最近 21 行（20 日窗口 + 1 行 prev），大幅压缩 transform 数据量
-        hist = hist.groupby('stock_code', sort=False).tail(21)
+        if today.empty:
+            return pd.DataFrame()
 
-        # 在压缩后的副本上一次性计算所有滚动列
-        hist = hist.copy()
-        g = hist.groupby('stock_code', sort=False)
-        hist['vol_ma5'] = g['volume'].rolling(5, min_periods=1).mean().values
-        hist['vol_ma20'] = g['volume'].rolling(20, min_periods=5).mean().values
-        hist['close_std_20'] = g['close'].rolling(20, min_periods=5).std().values
-        hist['high_20_max'] = g['high'].shift(1).rolling(20, min_periods=1).max().values
+        today = today.set_index('stock_code')
+        prev = prev.set_index('stock_code')
 
-        # 提取每只股票的最新和上一行
-        g2 = hist.groupby('stock_code', sort=False)
-        latest = g2.last().copy()           # index = stock_code
-        prev = g2.nth(-2).copy()            # index = trade_date (original), 需对齐
-        prev.index = prev['stock_code']     # 对齐到 stock_code（每组唯一）
+        # Only keep stocks present in both days (needed for cross detection)
+        common = today.index.intersection(prev.index)
+        if common.empty:
+            return pd.DataFrame()
 
-        # 填充缺失值（新股可能 history 不足）
-        cols = ['vol_ma5', 'vol_ma20', 'close_std_20', 'high_20_max']
-        for c in cols:
-            if c in latest.columns:
-                latest[c] = latest[c].fillna(0)
-            if c in prev.columns:
-                prev[c] = prev[c].fillna(0)
+        t = today.loc[common]
+        p = prev.loc[common]
 
         return pd.DataFrame({
-            'kdj_k': latest['kdj_k'], 'kdj_d': latest['kdj_d'],
-            'kdj_k_p': prev['kdj_k'], 'kdj_d_p': prev['kdj_d'],
-            'macd_dif': latest['macd_dif'], 'macd_dea': latest['macd_dea'],
-            'macd_dif_p': prev['macd_dif'], 'macd_dea_p': prev['macd_dea'],
-            'ma_5': latest['ma_5'], 'ma_20': latest['ma_20'],
-            'ma_5_p': prev['ma_5'], 'ma_20_p': prev['ma_20'],
-            'vol_ma5': latest['vol_ma5'], 'vol_ma20': latest['vol_ma20'],
-            'vol_ma5_p': prev['vol_ma5'], 'vol_ma20_p': prev['vol_ma20'],
-            'close': latest['close'], 'close_std_20': latest['close_std_20'],
-            'boll_mid': latest['boll_mid'], 'high_20_max': latest['high_20_max'],
-            'psy': latest['psy'], 'psyma': latest['psyma'],
-        }, index=latest.index)
+            'kdj_k': t['kdj_k'], 'kdj_d': t['kdj_d'],
+            'kdj_k_p': p['kdj_k'], 'kdj_d_p': p['kdj_d'],
+            'macd_dif': t['macd_dif'], 'macd_dea': t['macd_dea'],
+            'macd_dif_p': p['macd_dif'], 'macd_dea_p': p['macd_dea'],
+            'ma_5': t['ma_5'], 'ma_20': t['ma_20'],
+            'ma_5_p': p['ma_5'], 'ma_20_p': p['ma_20'],
+            'vol_ma5': t['vol_ma5'], 'vol_ma20': t['vol_ma20'],
+            'vol_ma5_p': p['vol_ma5'], 'vol_ma20_p': p['vol_ma20'],
+            'close': t['close'], 'close_std_20': t['close_std_20'],
+            'boll_mid': t['boll_mid'], 'high_20_max': t['high_20_max'],
+            'psy': t['psy'], 'psyma': t['psyma'],
+        }, index=common)
 
     def _execute_buy(
         self,
         date_str: str,
-        stock_data: Dict[str, pd.DataFrame],
+        valid_codes: set,
         candidates: List[str],
         max_positions: int,
         current_prices: Dict[str, float],
@@ -489,52 +562,39 @@ class DailyRotationEngine:
         if x <= 0 or not candidates:
             return buy_trades, top_stocks_info
 
-        # 提取候选股因子数据
-        factor_data_dict = {}
-        for stock_code in candidates:
-            df = stock_data.get(stock_code)
-            if df is None or df.empty:
-                continue
-            row = df.iloc[-1]
-            factor_row = {}
+        # 向量化提取候选股因子数据 — 从 _today_df 直接构建因子矩阵
+        candidates_df = self._today_df[self._today_df['stock_code'].isin(candidates)]
+        if candidates_df.empty:
+            return buy_trades, top_stocks_info
+        cdf = candidates_df.set_index('stock_code')
+        factor_df = pd.DataFrame(index=cdf.index)
 
-            # 计算 RET_5（OVERHEAT 计算需要）
-            if len(df) >= 5 and 'close' in df.columns:
-                ret5 = row['close'] / df['close'].iloc[-5] - 1
+        for factor in self.ranker.factor_weights.keys():
+            if factor == 'RET_20':
+                factor_df[factor] = cdf['ret_20'].fillna(0.0).astype(float)
+            elif factor == 'OVERHEAT':
+                rsi = cdf['rsi_1']
+                ret5 = cdf['ret_5'].fillna(0.0).astype(float)
+                oh = pd.Series(0.0, index=cdf.index)
+                rsi_t = self.config.overheat_rsi_threshold
+                ret5_t = self.config.overheat_ret5_threshold
+                mask = (rsi > rsi_t) & (ret5 > ret5_t)
+                rsi_c = np.maximum(0.0, (rsi[mask] - rsi_t) / (100 - rsi_t))
+                ret_c = np.minimum(1.0, np.maximum(0.0, (ret5[mask] - ret5_t) / 0.35))
+                oh[mask] = (rsi_c + ret_c) / 2.0
+                factor_df[factor] = oh
+            elif factor == 'circulating_mv':
+                mv = cdf['circulating_mv']
+                factor_df[factor] = np.where(mv > 0, np.log(mv), np.nan)
+            elif factor == 'WR_10':
+                factor_df[factor] = cdf['wr_10'].fillna(0.0).astype(float)
+            elif factor == 'WR_14':
+                factor_df[factor] = cdf['wr_14'].fillna(0.0).astype(float)
+            elif factor in cdf.columns:
+                factor_df[factor] = cdf[factor]
             else:
-                ret5 = 0.0
+                factor_df[factor] = np.nan
 
-            for factor in self.ranker.factor_weights.keys():
-                if factor == 'RET_20':
-                    # 20日收益率 = 当日收盘 / 20日前收盘 - 1
-                    if len(df) >= 20 and 'close' in df.columns:
-                        factor_row[factor] = row['close'] / df['close'].iloc[-20] - 1
-                    else:
-                        factor_row[factor] = np.nan
-                elif factor == 'OVERHEAT':
-                    rsi_val = row.get('rsi_1', np.nan)
-                    if pd.notna(rsi_val):
-                        factor_row[factor] = compute_overheat(
-                            float(rsi_val), ret5,
-                            self.config.overheat_rsi_threshold,
-                            self.config.overheat_ret5_threshold
-                        )
-                    else:
-                        factor_row[factor] = 0.0
-                elif factor == 'circulating_mv':
-                    val = row.get('circulating_mv', np.nan)
-                    factor_row[factor] = np.log(val) if val > 0 else np.nan
-                elif factor in ('WR_10', 'WR_14'):
-                    period = 10 if factor == 'WR_10' else 14
-                    factor_row[factor] = FactorProcessor.williams_r(df, period)
-                elif factor in row.index:
-                    val = row[factor]
-                    factor_row[factor] = val if val == val else np.nan  # NaN check
-                else:
-                    factor_row[factor] = np.nan
-            factor_data_dict[stock_code] = factor_row
-
-        factor_df = pd.DataFrame(factor_data_dict).T
         factor_df = factor_df.fillna(0)
         ranked = self.ranker.rank(factor_df, top_n=x)
 
@@ -623,123 +683,110 @@ class DailyRotationEngine:
         dates = sorted(index_df.index.unique())
         return [pd.Timestamp(d) for d in dates]
 
-    def _preload_histories(self, first_date: pd.Timestamp):
-        """预加载初始窗口：回测首日前30个日历日的数据 → master DataFrame"""
-        if not self._all_codes:
-            return
+    def _init_prev_cache(self, first_date: pd.Timestamp):
+        """加载 first_date 前一个交易日的数据作为 _prev_df。
 
-        start = (first_date - pd.Timedelta(days=self.PRELOAD_DAYS)).strftime('%Y-%m-%d')
-        end = first_date.strftime('%Y-%m-%d')
-
-        histories = self.data_provider.get_batch_histories(
-            self._all_codes, end_date=end, start_date=start
-        )
-
-        frames = [df for df in histories.values() if not df.empty]
-        self._cache_df = pd.concat(frames) if frames else pd.DataFrame()
+        向后搜索最多 15 个日历日（覆盖春节等长假），找到第一个有 Parquet 文件的交易日。
+        如果找不到（极罕见），_prev_df 保持为空，Day-1 信号检测自动跳过（影响可忽略）。
+        """
+        for offset in range(1, 16):
+            candidate = first_date - pd.Timedelta(days=offset)
+            date_str = candidate.strftime('%Y-%m-%d')
+            df = self.data_provider.get_daily_dataframe(date_str)
+            if df is not None and not df.empty:
+                df = df.copy()
+                df['trade_date'] = candidate
+                self._prev_df = df.set_index('trade_date')
+                return
 
     def _advance_to_date(self, date: pd.Timestamp):
-        """推进到指定日期：读取当日 Parquet，一次 concat 追加到 master DataFrame"""
+        """滚动指针: 将前一日的 _today_df 变为 _prev_df，读入当日新数据。
+
+        不再累积历史数据，不再 concat。每天只读一个 Parquet 文件。
+        """
+        if not self._today_df.empty:
+            self._prev_df = self._today_df
+
         date_str = date.strftime('%Y-%m-%d')
+        day_df = self.data_provider.get_daily_dataframe(date_str)
+        if day_df is None or day_df.empty:
+            self._today_df = pd.DataFrame()
+            return
 
-        if self._has_fast_daily:
-            day_df = self.data_provider.get_daily_dataframe(date_str)
-            if day_df is None or day_df.empty:
-                return
+        day_df = day_df.copy()
+        day_df['trade_date'] = pd.Timestamp(date_str)
+        self._today_df = day_df.set_index('trade_date')
 
-            day_df = day_df.copy()
-            day_df['trade_date'] = pd.Timestamp(date_str)
-            day_df = day_df.set_index('trade_date')
+    def _get_stock_df(self, stock_code: str) -> pd.DataFrame:
+        """按需构建单只股票的 1-2 行 DataFrame（前日+当日）。
 
-            # 清理停牌/退市股票（不在当日交易且无持仓的股票从缓存中移除）
-            trading_codes = set(day_df['stock_code'].unique())
-            if not self._cache_df.empty:
-                positions_set = {p.stock_code for p in self.positions.values()}
-                cached_codes = set(self._cache_df['stock_code'].unique())
-                stale = cached_codes - trading_codes - positions_set
-                if stale:
-                    self._cache_df = self._cache_df[~self._cache_df['stock_code'].isin(stale)]
+        仅在需要时（持仓卖出检查、候选买入因子提取）调用，
+        每次 ~0.1ms（boolean mask on 4760 rows），替代全市场 groupby (~250ms)。
+        """
+        self._n_stock_df_calls = getattr(self, '_n_stock_df_calls', 0) + 1
+        rows = []
+        if not self._prev_df.empty:
+            p = self._prev_df[self._prev_df['stock_code'] == stock_code]
+            if not p.empty:
+                rows.append(p)
+        if not self._today_df.empty:
+            t = self._today_df[self._today_df['stock_code'] == stock_code]
+            if not t.empty:
+                rows.append(t)
+        if not rows:
+            return pd.DataFrame()
+        return pd.concat(rows)
 
-            # 一次 concat 追加所有股票（替代 4761 次 per-stock concat）
-            if self._cache_df.empty:
-                self._cache_df = day_df
-            else:
-                self._cache_df = pd.concat([self._cache_df, day_df], sort=False)
-        else:
-            # 原始路径：DataProvider 返回 dict → 转为 DataFrame 后一次 concat
-            day_data = self.data_provider.get_stocks_for_date(self._all_codes, date_str)
-            if not day_data:
-                return
+    def _get_current_prices(self, valid_codes: set) -> Dict[str, float]:
+        """从 _today_df 直接提取有效股票的收盘价字典 — 零 groupby。
 
-            from collections import defaultdict
-            rows: list = []
-            for stock_code, row_data in day_data.items():
-                row_data['trade_date'] = pd.Timestamp(date_str)
-                row_data['stock_code'] = stock_code
-                rows.append(row_data)
-
-            if not rows:
-                return
-
-            day_df = pd.DataFrame(rows).set_index('trade_date')
-
-            trading_codes = set(day_data.keys())
-            if not self._cache_df.empty:
-                positions_set = {p.stock_code for p in self.positions.values()}
-                cached_codes = set(self._cache_df['stock_code'].unique())
-                stale = cached_codes - trading_codes - positions_set
-                if stale:
-                    self._cache_df = self._cache_df[~self._cache_df['stock_code'].isin(stale)]
-
-            if self._cache_df.empty:
-                self._cache_df = day_df
-            else:
-                self._cache_df = pd.concat([self._cache_df, day_df], sort=False)
-
-    def _get_daily_stock_data(self, date: pd.Timestamp) -> Dict[str, pd.DataFrame]:
-        """从 master DataFrame 中提取当日活跃股票的滚动数据（≥20 个交易日）"""
-        if self._cache_df.empty:
+        使用 set_index 向量化（~5ms），替代逐股 iloc[-1] 迭代 (~250ms)。
+        """
+        today = self._today_df[self._today_df['stock_code'].isin(valid_codes)]
+        if today.empty:
             return {}
+        indexed = today.set_index('stock_code')
+        return indexed['close'].to_dict()
 
-        # 裁剪到当前日期
-        window = self._cache_df[self._cache_df.index <= date]
-        if window.empty:
-            return {}
+    def _filter_stock_pool(self, date: pd.Timestamp) -> set:
+        """过滤股票池（ST、新股、涨跌停、停牌）— 向量化在 _today_df 上。
 
-        result = {}
-        for code, group in window.groupby('stock_code', sort=False):
-            if len(group) >= self.MIN_TRADING_DAYS and date in group.index:
-                result[code] = group
-        return result
+        返回有效股票代码集合。零 groupby，零逐股迭代。
+        """
+        if self._today_df.empty:
+            return set()
 
-    def _filter_stock_pool(self, stock_data: Dict[str, pd.DataFrame]) -> Dict[str, pd.DataFrame]:
-        """过滤股票池（ST、涨跌停、停牌）"""
-        filtered = {}
-        for stock_code, df in stock_data.items():
-            if df.empty:
-                continue
-            latest = df.iloc[-1]
+        today = self._today_df
+        mask = pd.Series(True, index=today.index)
 
-            if self.config.exclude_st:
-                name = str(latest.get('stock_name', ''))
-                if 'ST' in name or '*ST' in name:
-                    continue
+        if self.config.exclude_st and 'stock_name' in today.columns:
+            mask &= ~today['stock_name'].astype(str).str.contains(
+                r'ST|\*ST', regex=True, na=False
+            )
+
+        if self.config.exclude_new_stocks and 'stock_name' in today.columns:
+            mask &= ~today['stock_name'].astype(str).str.match(
+                r'^N', na=False
+            )
+
+        if self.config.exclude_limit_up or self.config.exclude_limit_down:
+            chg = today['change_pct'].fillna(0.0)
+            code = today['stock_code']
+            # 不同市场的涨跌停幅度（数据为小数，0.1=10%）
+            limit_pct = pd.Series(0.10, index=today.index)
+            # 创业板: 2020-08-24 起由 10% 放宽至 20%
+            if date >= pd.Timestamp('2020-08-24'):
+                limit_pct[code.str.startswith('sz30')] = 0.20
+            limit_pct[code.str.startswith('sh688')] = 0.20
+            limit_pct[code.str.match(r'^bj8\d')] = 0.30
 
             if self.config.exclude_limit_up:
-                # 用 change_pct 近似判断涨停（A股涨跌停板 ≈ ±10%）
-                change_pct = latest.get('change_pct', 0.0) or 0.0
-                if change_pct >= 9.9:
-                    continue
+                mask &= chg < (limit_pct - 0.005)
 
             if self.config.exclude_limit_down:
-                change_pct = latest.get('change_pct', 0.0) or 0.0
-                if change_pct <= -9.9:
-                    continue
+                mask &= chg > -(limit_pct - 0.005)
 
-            if self.config.exclude_suspended:
-                if latest.get('volume', 0) == 0:
-                    continue
+        if self.config.exclude_suspended:
+            mask &= today['volume'].fillna(0.0) > 0
 
-            filtered[stock_code] = df
-
-        return filtered
+        return set(today.loc[mask, 'stock_code'])

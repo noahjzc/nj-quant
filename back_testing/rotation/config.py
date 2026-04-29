@@ -76,11 +76,14 @@ class RotationConfig:
     market_regime: MarketRegimeConfig = field(default_factory=MarketRegimeConfig)
     # 股票池过滤
     exclude_st: bool = True
+    exclude_new_stocks: bool = True
     exclude_limit_up: bool = True
     exclude_limit_down: bool = True
     exclude_suspended: bool = True
     # 大盘指数代码
     benchmark_index: str = 'sh000300'
+    # Trial 提前淘汰：资产低于初始资本的该比例时触发 Optuna pruning
+    min_asset_ratio: float = 0.5
     # ATR 止损止盈参数（StopLossStrategies）
     atr_period: int = 8
     stop_loss_mult: float = 1.8039991280707548

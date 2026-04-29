@@ -388,6 +388,79 @@ class DataProvider:
         finally:
             session.close()
 
+    def get_daily_dataframe(self, date: str) -> pd.DataFrame:
+        """获取指定日期的全市场 DataFrame（兼容 CachedProvider 接口）。
+
+        用于新引擎的每日滚动指针。从 PostgreSQL 单次查询。
+        """
+        session = self.Session()
+        try:
+            target_date = pd.to_datetime(date)
+            results = session.query(StockDaily).filter(
+                StockDaily.trade_date == target_date
+            ).all()
+
+            if not results:
+                return pd.DataFrame()
+
+            rows = []
+            for r in results:
+                rows.append({
+                    'stock_code': r.stock_code,
+                    'trade_date': pd.Timestamp(r.trade_date),
+                    'stock_name': r.stock_name,
+                    'open': float(r.open) if r.open else 0.0,
+                    'high': float(r.high) if r.high else 0.0,
+                    'low': float(r.low) if r.low else 0.0,
+                    'close': float(r.close) if r.close else 0.0,
+                    'volume': float(r.volume) if r.volume else 0.0,
+                    'turnover_amount': float(r.turnover_amount) if r.turnover_amount else 0.0,
+                    'adj_close': float(r.adj_close) if r.adj_close else 0.0,
+                    'prev_adj_close': float(r.prev_adj_close) if r.prev_adj_close else 0.0,
+                    'amplitude': float(r.amplitude) if r.amplitude else 0.0,
+                    'change_pct': float(r.change_pct) if r.change_pct else 0.0,
+                    'turnover_rate': float(r.turnover_rate) if r.turnover_rate else 0.0,
+                    'volume_ratio': float(r.volume_ratio) if r.volume_ratio else 0.0,
+                    'circulating_mv': float(r.circulating_mv) if r.circulating_mv else 0.0,
+                    'total_mv': float(r.total_mv) if r.total_mv else 0.0,
+                    'limit_up': r.limit_up,
+                    'limit_down': r.limit_down,
+                    'pe_ttm': float(r.pe_ttm) if r.pe_ttm else None,
+                    'ps_ttm': float(r.ps_ttm) if r.ps_ttm else None,
+                    'pcf_ttm': float(r.pcf_ttm) if r.pcf_ttm else None,
+                    'pb': float(r.pb) if r.pb else None,
+                    'ma_5': float(r.ma_5) if r.ma_5 else None,
+                    'ma_10': float(r.ma_10) if r.ma_10 else None,
+                    'ma_20': float(r.ma_20) if r.ma_20 else None,
+                    'ma_30': float(r.ma_30) if r.ma_30 else None,
+                    'ma_60': float(r.ma_60) if r.ma_60 else None,
+                    'ma_cross': r.ma_cross,
+                    'macd_dif': float(r.macd_dif) if r.macd_dif else None,
+                    'macd_dea': float(r.macd_dea) if r.macd_dea else None,
+                    'macd_hist': float(r.macd_hist) if r.macd_hist else None,
+                    'macd_cross': r.macd_cross,
+                    'kdj_k': float(r.kdj_k) if r.kdj_k else None,
+                    'kdj_d': float(r.kdj_d) if r.kdj_d else None,
+                    'kdj_j': float(r.kdj_j) if r.kdj_j else None,
+                    'kdj_cross': r.kdj_cross,
+                    'boll_mid': float(r.boll_mid) if r.boll_mid else None,
+                    'boll_upper': float(r.boll_upper) if r.boll_upper else None,
+                    'boll_lower': float(r.boll_lower) if r.boll_lower else None,
+                    'rsi_1': float(r.rsi_1) if r.rsi_1 else None,
+                    'rsi_2': float(r.rsi_2) if r.rsi_2 else None,
+                    'rsi_3': float(r.rsi_3) if r.rsi_3 else None,
+                    'psy': float(r.psy) if r.psy else None,
+                    'psyma': float(r.psyma) if r.psyma else None,
+                    'industry': r.industry,
+                    'concept': r.concept,
+                    'area': r.area,
+                })
+
+            return pd.DataFrame(rows)
+
+        finally:
+            session.close()
+
     def get_stock_price(
         self,
         stock_code: str,
