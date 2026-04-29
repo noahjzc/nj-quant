@@ -224,6 +224,8 @@ __marimo__/
 data/*
 .venvLibsite-packages
 back_testing/results/*
+results/*
+output/*
 
 # Database configuration (contains credentials)
 back_testing/config/database.ini

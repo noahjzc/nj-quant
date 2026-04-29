@@ -2,12 +2,18 @@
 import argparse
 import json
 import logging
+import os
+from datetime import datetime
+from pathlib import Path
+
+import pandas as pd
+
 from back_testing.rotation.daily_rotation_engine import DailyRotationEngine
 from back_testing.rotation.config import RotationConfig, MarketRegimeConfig
 from back_testing.analysis.performance_analyzer import PerformanceAnalyzer
+from back_testing.analysis.visualizer import PerformanceVisualizer
 from back_testing.data.daily_data_cache import DailyDataCache, CachedProvider
 from back_testing.optimization.run_daily_rotation_optimization import _params_to_config
-import pandas as pd
 
 
 def run(start_date: str, end_date: str, config: RotationConfig = None, verbose: bool = False,
@@ -55,46 +61,94 @@ def run(start_date: str, end_date: str, config: RotationConfig = None, verbose: 
                                  data_provider=data_provider)
     results = engine.run()
 
-    # 输出统计
-    # 计算最终总资产：现金 + 持仓市值
-    final_result = results[-1] if results else None
-    final_total_asset = final_result.total_asset if final_result else engine.current_capital
-    total_return = (final_total_asset / config.initial_capital - 1) if config else 0
-    print(f"\n最终资产: {final_total_asset:,.2f}")
-    print(f"总收益率: {total_return:.2%}")
-    print(f"交易次数: {len(engine.trade_history)}")
-
-    # 绩效分析
+    # 绩效分析 & 导出
     if results:
-        df = pd.DataFrame([{
-            'date': r.date,
-            'total_asset': r.total_asset,
-            'cash': r.cash,
-            'position_value': r.total_asset - r.cash,
-            'n_positions': len(r.positions),
-            'regime': r.market_regime,
-        } for r in results])
-
-        # Convert TradeRecord to dict for PerformanceAnalyzer compatibility
-        trades_dicts = [
-            {'action': t.action.lower(), 'price': t.price, 'shares': t.shares,
-             'return': 0.0}  # win_rate uses equity_curve; return from trades is secondary
-            for t in engine.trade_history
-        ]
-
-        analyzer = PerformanceAnalyzer(
-            trades=trades_dicts,
-            initial_capital=config.initial_capital,
-            equity_curve=[config.initial_capital] + df['total_asset'].tolist(),
-            periods_per_year=252
-        )
-        perf = analyzer.calculate_metrics()
-        print(f"\n绩效指标:")
-        print(f"  年化收益率: {perf.get('annual_return', 0):.2%}")
-        print(f"  Sharpe: {perf.get('sharpe_ratio', 0):.2f}")
-        print(f"  最大回撤: {perf.get('max_drawdown', 0):.2%}")
+        _export_results(results, engine, config, start_date, end_date)
 
     return engine, results
+
+
+def _export_results(results, engine, config, start_date, end_date):
+    """导出回测结果到时间戳文件夹。"""
+    ts = datetime.now().strftime('%Y_%m_%d_%H_%M')
+    out_dir = Path(f'results/{ts}_performance')
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # ── 1. 构建净值 DataFrame ──
+    equity_df = pd.DataFrame([{
+        'date': r.date, 'total_asset': r.total_asset, 'cash': r.cash,
+        'position_value': r.total_asset - r.cash,
+        'n_positions': len(r.positions), 'regime': r.market_regime,
+    } for r in results])
+    equity_df.to_csv(out_dir / 'equity_curve.csv', index=False, encoding='utf-8-sig')
+
+    # ── 2. 交易明细 CSV ──
+    trades_df = pd.DataFrame([{
+        'date': t.date, 'stock_code': t.stock_code, 'action': t.action,
+        'price': t.price, 'shares': t.shares, 'cost': t.cost,
+        'capital_before': t.capital_before,
+    } for t in engine.trade_history])
+    if not trades_df.empty:
+        trades_df.to_csv(out_dir / 'trades.csv', index=False, encoding='utf-8-sig')
+
+    # ── 3. 每日持仓 CSV ──
+    pos_rows = []
+    for r in results:
+        for code, pos in r.positions.items():
+            pos_rows.append({
+                'date': r.date, 'stock_code': code, 'shares': pos.shares,
+                'buy_price': pos.buy_price, 'buy_date': pos.buy_date,
+                'highest_price': pos.highest_price,
+            })
+    if pos_rows:
+        pd.DataFrame(pos_rows).to_csv(out_dir / 'positions_daily.csv', index=False, encoding='utf-8-sig')
+
+    # ── 4. 绩效指标 JSON ──
+    analyzer = PerformanceAnalyzer(
+        trades=[{'action': t.action.lower(), 'price': t.price, 'shares': t.shares, 'return': 0.0}
+                for t in engine.trade_history],
+        initial_capital=config.initial_capital,
+        equity_curve=[config.initial_capital] + equity_df['total_asset'].tolist(),
+        periods_per_year=252,
+    )
+    metrics = analyzer.calculate_metrics()
+    with open(out_dir / 'metrics.json', 'w', encoding='utf-8') as f:
+        json.dump(metrics, f, indent=2, ensure_ascii=False, default=str)
+
+    # ── 5. HTML 报告 + 图表 ──
+    equity_curve = pd.Series(
+        [config.initial_capital] + equity_df['total_asset'].tolist(),
+        index=pd.to_datetime([start_date] + equity_df['date'].tolist()),
+        name='equity',
+    )
+    try:
+        benchmark_df = engine.data_provider.get_index_data(
+            config.benchmark_index,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        if not benchmark_df.empty and 'close' in benchmark_df.columns:
+            benchmark_norm = benchmark_df['close'] / benchmark_df['close'].iloc[0] * config.initial_capital
+            benchmark_curve = benchmark_norm.rename('benchmark')
+        else:
+            benchmark_curve = None
+    except Exception:
+        benchmark_curve = None
+
+    visualizer = PerformanceVisualizer(equity_curve, benchmark_curve)
+    visualizer.generate_report(
+        trades=[{'return': 0.0} for _ in engine.trade_history],
+        save_dir=str(out_dir),
+    )
+
+    # ── 6. 控制台摘要 ──
+    final_result = results[-1]
+    total_return = (final_result.total_asset / config.initial_capital - 1)
+    print(f"\n最终资产: {final_result.total_asset:,.2f}")
+    print(f"总收益率: {total_return:.2%}")
+    print(f"交易次数: {len(engine.trade_history)}")
+    print(f"年化收益: {metrics.get('annual_return', 0):.2%}  Sharpe: {metrics.get('sharpe_ratio', 0):.2f}  最大回撤: {metrics.get('max_drawdown', 0):.2%}")
+    print(f"结果已导出: {out_dir}")
 
 
 if __name__ == '__main__':
