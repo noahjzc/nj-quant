@@ -763,13 +763,20 @@ class DailyRotationEngine:
                 r'ST|\*ST', regex=True, na=False
             )
 
-        if self.config.exclude_limit_up:
+        if self.config.exclude_limit_up or self.config.exclude_limit_down:
             chg = today['change_pct'].fillna(0.0)
-            mask &= chg < 9.9
+            code = today['stock_code']
+            # 不同市场的涨跌停幅度
+            limit_pct = pd.Series(10.0, index=today.index)
+            limit_pct[code.str.startswith('sz30')] = 20.0
+            limit_pct[code.str.startswith('sh688')] = 20.0
+            limit_pct[code.str.match(r'^bj8\d')] = 30.0
 
-        if self.config.exclude_limit_down:
-            chg = today['change_pct'].fillna(0.0)
-            mask &= chg > -9.9
+            if self.config.exclude_limit_up:
+                mask &= chg < (limit_pct - 0.05)
+
+            if self.config.exclude_limit_down:
+                mask &= chg > -(limit_pct - 0.05)
 
         if self.config.exclude_suspended:
             mask &= today['volume'].fillna(0.0) > 0
