@@ -3,6 +3,7 @@ import time
 import pandas as pd
 import numpy as np
 import logging
+import optuna
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime
@@ -119,13 +120,17 @@ class DailyRotationEngine:
         self._n_stock_df_calls = 0
         self._fallback_count = 0
 
-    def run(self) -> List[DailyResult]:
+    def run(self, trial=None) -> List[DailyResult]:
         """Run the backtest main loop.
 
         Flow:
         1. Get trading dates from benchmark index.
         2. Initialize _prev_df from the trading day before first_date.
         3. For each date: advance data pointer → run single day logic → record results.
+
+        Args:
+            trial: Optional Optuna Trial for early pruning. When provided and
+                   total_asset falls below min_asset_ratio, raises TrialPruned.
         """
         dates = self._get_trading_dates()
         n_dates = len(dates)
@@ -184,6 +189,17 @@ class DailyRotationEngine:
             n_stock_df_calls += day_stats.get('n_stock_df', 0)
 
             self.daily_results.append(result)
+
+            # Early termination: total_asset below min_asset_ratio * initial_capital
+            if result.total_asset < self.config.initial_capital * self.config.min_asset_ratio:
+                if trial is not None:
+                    trial.report(result.total_asset / self.config.initial_capital, i)
+                    raise optuna.TrialPruned(
+                        f"第{i+1}天资产 {result.total_asset:,.0f} < "
+                        f"初始 {self.config.initial_capital * self.config.min_asset_ratio:,.0f}"
+                    )
+                else:
+                    return self.daily_results
 
         final_asset = self.daily_results[-1].total_asset if self.daily_results else self.current_capital
         avg_ms = t_total / n_dates * 1000

@@ -81,6 +81,8 @@ class RotationConfig:
     exclude_suspended: bool = True
     # 大盘指数代码
     benchmark_index: str = 'sh000300'
+    # Trial 提前淘汰：资产低于初始资本的该比例时触发 Optuna pruning
+    min_asset_ratio: float = 0.5
     # ATR 止损止盈参数（StopLossStrategies）
     atr_period: int = 8
     stop_loss_mult: float = 1.8039991280707548
