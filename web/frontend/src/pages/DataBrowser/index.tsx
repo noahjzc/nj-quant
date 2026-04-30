@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Table, Input, Button, Space, Drawer } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
-import axios from 'axios';
+import api from '../../utils/api';
 
 const DataBrowser: React.FC = () => {
   const [data, setData] = useState([]);
@@ -17,7 +17,7 @@ const DataBrowser: React.FC = () => {
   const fetch = async (p: number = 1) => {
     setLoading(true);
     try {
-      const res = await axios.get('/api/data/stocks', {
+      const res = await api.get('/data/stocks', {
         params: { page: p, search: search || undefined, page_size: 50 },
       });
       setData(res.data.data);
@@ -32,7 +32,7 @@ const DataBrowser: React.FC = () => {
   const handleDetail = async (code: string) => {
     setDetailCode(code);
     setDetailVisible(true);
-    const res = await axios.get(`/api/data/stocks/${code}`);
+    const res = await api.get(`/data/stocks/${code}`);
     setDetailData(res.data);
   };
 

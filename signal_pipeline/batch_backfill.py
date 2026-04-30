@@ -1,7 +1,7 @@
 """Batch Backfill — 批量从 Tushare 拉取日线数据写入 PostgreSQL。
 
 Usage:
-    python signal_pipeline/batch_backfill.py --start 2025-04-23 --end 2025-04-30
+    python signal_pipeline/batch_backfill.py --date 2025-04-23
 """
 import argparse
 import logging
@@ -14,10 +14,6 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
 from signal_pipeline.night_backfill import (
-    TushareClient,
-    _convert_ts_code,
-    _na_to_none,
-    _get_engine,
     _backfill_single_day,
 )
 
@@ -28,46 +24,26 @@ logging.basicConfig(
 logger = logging.getLogger("batch_backfill")
 
 
-def _generate_trading_days(start: date, end: date) -> list:
-    """生成 start ~ end 范围内的所有交易日（跳过周末）。"""
-    return pd.bdate_range(start, end).tolist()
-
-
 def main():
-    parser = argparse.ArgumentParser(description="批量补全 Tushare 日线数据")
-    parser.add_argument("--start", required=True, help="起始日期 YYYY-MM-DD")
-    parser.add_argument("--end", required=True, help="结束日期 YYYY-MM-DD")
+    parser = argparse.ArgumentParser(description="补全指定日期的 Tushare 日线数据")
+    parser.add_argument("--date", required=True, help="目标日期 YYYY-MM-DD")
     args = parser.parse_args()
 
-    start_date = pd.to_datetime(args.start).date()
-    end_date = pd.to_datetime(args.end).date()
+    target_date = pd.to_datetime(args.date).date()
 
     token = os.environ.get("TUSHARE_TOKEN")
     if not token:
         logger.error("TUSHARE_TOKEN environment variable not set")
         sys.exit(1)
 
-    days = _generate_trading_days(start_date, end_date)
-    logger.info(f"=== Batch Backfill {start_date} ~ {end_date} ===")
-    logger.info(f"Trading days: {[str(d.date()) for d in days]}")
+    logger.info(f"=== Batch Backfill {target_date} ===")
 
-    succeeded, failed = 0, []
-    for d in days:
-        ok, rows, err = _backfill_single_day(d, token)
-        if ok:
-            logger.info(f"{d.date()}  ✓  {rows} rows")
-            succeeded += 1
-        else:
-            logger.error(f"{d.date()}  ✗  {err}")
-            failed.append((d, err))
-            break  # 失败即停
-
-    if failed:
-        logger.error(f"=== FAILED: {failed[0][0].date()} — {failed[0][1]} ===")
-        logger.error(f"Total: {succeeded} succeeded, {len(failed)} failed")
-        sys.exit(1)
+    ok, rows, err = _backfill_single_day(target_date, token)
+    if ok:
+        logger.info(f"{target_date}  ok  {rows} stocks processed")
     else:
-        logger.info(f"=== All {succeeded} days succeeded ===")
+        logger.error(f"{target_date}  failed  {err}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

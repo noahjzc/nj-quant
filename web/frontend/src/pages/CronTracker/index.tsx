@@ -1,8 +1,8 @@
 // web/frontend/src/pages/CronTracker/index.tsx
 import React, { useEffect, useState } from 'react';
-import { Card, Table, Tag, Descriptions, Space, Button } from 'antd';
+import { Card, Table, Tag, Descriptions, Button } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined, SyncOutlined } from '@ant-design/icons';
-import axios from 'axios';
+import api from '../../utils/api';
 
 const STATUS_ICON: Record<string, React.ReactNode> = {
   success: <CheckCircleOutlined style={{ color: '#52c41a' }} />,
@@ -19,8 +19,8 @@ const CronTracker: React.FC = () => {
     setLoading(true);
     try {
       const [logRes, statusRes] = await Promise.all([
-        axios.get('/api/cron/'),
-        axios.get('/api/cron/status'),
+        api.get('/cron/'),
+        api.get('/cron/status'),
       ]);
       setLogs(logRes.data);
       setCompleteness(statusRes.data);

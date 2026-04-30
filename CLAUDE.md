@@ -137,3 +137,6 @@ Dependencies: `optuna` is required but NOT listed in `requirements.txt`.
 - Factor directions: `1` = larger is better, `-1` = smaller is better
 - Database config: `config/database.ini` (PostgreSQL)
 - Virtual environment: `.venv/` (Windows)
+
+
+## do not use git for this

@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Row, Col, Statistic, Table, Tag, Button, Modal, InputNumber, Space, message } from 'antd';
 import { WalletOutlined, DollarOutlined, StockOutlined, RiseOutlined } from '@ant-design/icons';
-import axios from 'axios';
+import api from '../../utils/api';
 
 const Positions: React.FC = () => {
   const [overview, setOverview] = useState<any>({});
@@ -17,10 +17,10 @@ const Positions: React.FC = () => {
     setLoading(true);
     try {
       const [ov, pos, hist, cap] = await Promise.all([
-        axios.get('/api/positions/overview'),
-        axios.get('/api/positions/', { params: { status: 'OPEN' } }),
-        axios.get('/api/positions/', { params: { status: 'CLOSED' } }),
-        axios.get('/api/positions/capital'),
+        api.get('/positions/overview'),
+        api.get('/positions/', { params: { status: 'OPEN' } }),
+        api.get('/positions/', { params: { status: 'CLOSED' } }),
+        api.get('/positions/capital'),
       ]);
       setOverview(ov.data);
       setPositions(pos.data);
@@ -35,7 +35,7 @@ const Positions: React.FC = () => {
 
   const handleDeposit = async () => {
     if (!depositAmount) return;
-    await axios.post('/api/positions/capital/deposit', { amount: depositAmount });
+    await api.post('/positions/capital/deposit', { amount: depositAmount });
     message.success('资金补充成功');
     setDepositVisible(false);
     setDepositAmount(undefined);

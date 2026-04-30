@@ -4,7 +4,13 @@ import datetime
 
 from web.server.api import signals, positions, data_browser, cron_status
 
-app = FastAPI(title="NJ Quant Signal Dashboard")
+app = FastAPI(
+    title="NJ Quant Signal Dashboard",
+    version="1.0.0",
+    description="A股每日实盘信号管线 — 信号生成、持仓管理、数据浏览、任务追踪",
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
 
 app.add_middleware(
     CORSMiddleware,

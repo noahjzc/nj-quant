@@ -167,8 +167,11 @@ def main():
 
         logger.info(f"Fetching daily data for {tushare_date}...")
         daily_df = client.get_daily_all(tushare_date)
-        # Rename Tushare daily columns to match DB schema
-        daily_df = daily_df.rename(columns={'vol': 'volume', 'amount': 'turnover_amount'})
+        # Tushare daily columns: vol=手, amount=千元 → DB: volume=股, turnover_amount=元
+        daily_df = daily_df.rename(columns={'vol': 'vol_raw', 'amount': 'amount_raw'})
+        daily_df['volume'] = daily_df['vol_raw'] * 100        # 手 → 股
+        daily_df['turnover_amount'] = daily_df['amount_raw'] * 1000  # 千元 → 元
+        daily_df = daily_df.drop(columns=['vol_raw', 'amount_raw'])
         logger.info(f"  daily: {len(daily_df)} rows")
 
         logger.info(f"Fetching daily_basic for {tushare_date}...")
@@ -193,6 +196,7 @@ def main():
             "total_mv": "total_mv",
             "pe_ttm": "pe_ttm",
             "ps_ttm": "ps_ttm",
+            "pcf_ttm": "pcf_ttm",
             "pb": "pb",
             "circulating_mv": "circulating_mv",
             "float_mv": "circulating_mv",
@@ -362,22 +366,94 @@ def main():
         session.close()
 
 
+def _backfill_index_data(client: TushareClient, target_date: date) -> None:
+    """从 Tushare 获取指定日期的主要指数数据，写入 index_daily 表。
+
+    覆盖的指数：上证综指、沪深300、深证成指、创业板指。
+    """
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    from back_testing.data.db.models import IndexDaily
+
+    # 本地代码 → Tushare 代码
+    LOCAL_TO_TUSHARE = {
+        "sh000001": "000001.SH",  # 上证综指
+        "sh000300": "000300.SH",  # 沪深300
+        "sz399001": "399001.SZ",  # 深证成指
+        "sz399006": "399006.SZ",  # 创业板指
+    }
+    TUSHARE_TO_LOCAL = {v: k for k, v in LOCAL_TO_TUSHARE.items()}
+
+    tushare_date = target_date.strftime("%Y%m%d")
+    engine = _get_engine()
+
+    for local_code, ts_code in LOCAL_TO_TUSHARE.items():
+        try:
+            # 用默认参数捕获 ts_code，避免闭包引用问题
+            df = client._call_with_retry(
+                lambda tc=ts_code: client.pro.index_daily(
+                    ts_code=tc, start_date=tushare_date, end_date=tushare_date
+                )
+            )
+            if df.empty:
+                logger.warning(f"Index {ts_code} returned empty for {tushare_date}")
+                continue
+
+            for _, row in df.iterrows():
+                # Tushare 返回 trade_date 是字符串 "YYYYMMDD"，需转成 date
+                trade_date_val = row["trade_date"]
+                if isinstance(trade_date_val, str):
+                    trade_date_val = pd.to_datetime(trade_date_val).date()
+                insert_data = {
+                    "index_code": TUSHARE_TO_LOCAL.get(row["ts_code"], row["ts_code"].lower().replace(".", "")),
+                    "trade_date": trade_date_val,
+                    "open": _na_to_none(row["open"]),
+                    "high": _na_to_none(row["high"]),
+                    "low": _na_to_none(row["low"]),
+                    "close": _na_to_none(row["close"]),
+                    "volume": _na_to_none(row["vol"]) * 100 if row.get("vol") is not None else None,  # 手 → 股
+                    "turnover": _na_to_none(row.get("amount")) * 1000 if row.get("amount") else None,  # 千元 → 元
+                }
+                stmt = pg_insert(IndexDaily).values(**insert_data)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["index_code", "trade_date"],
+                    set_=insert_data,
+                )
+                with engine.begin() as conn:
+                    conn.execute(stmt)
+
+            logger.info(f"Index {ts_code} upserted for {tushare_date}")
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch index {ts_code}: {e}")
+
+
 def _backfill_single_day(target_date: date, token: str) -> tuple[bool, int, str | None]:
     """单日补全逻辑（不写 Parquet，不写 cron_log）。
+
+    流程：
+      1. 从 Tushare 获取当天全市场数据（单日）
+      2. 逐股票处理：
+         - 从 DB 读取该股票最新 65 条记录
+         - 追加新数据，构造 66 行 DataFrame
+         - 调用 IndicatorCalculator.calculate_all() 计算指标
+         - 提取目标日期那行，upsert 到 DB
+      3. 构建缓存
 
     Returns:
         (success, rows_written, error_message)
     """
     from sqlalchemy.dialects.postgresql import insert as pg_insert
+    from sqlalchemy import text
     from back_testing.data.db.models import StockDaily
+    from back_testing.data.db.connection import get_engine
 
     client = TushareClient(token)
     tushare_date = target_date.strftime("%Y%m%d")
+    engine = get_engine()
 
     try:
+        # ── 1. 获取当天全市场数据 ────────────────────────────────────────
         daily_df = client.get_daily_all(tushare_date)
-        # Rename Tushare daily columns to match DB schema
-        daily_df = daily_df.rename(columns={'vol': 'volume', 'amount': 'turnover_amount'})
         if daily_df.empty:
             return False, 0, f"Tushare daily returned empty for {tushare_date}"
 
@@ -389,21 +465,26 @@ def _backfill_single_day(target_date: date, token: str) -> tuple[bool, int, str 
         if adj_df.empty:
             logger.warning(f"adj_factor returned empty for {tushare_date}")
 
-        # Convert ts_code → stock_code
+        # Tushare: vol=手 → volume=股, amount=千元 → turnover_amount=元
+        daily_df = daily_df.rename(columns={'vol': 'vol_raw', 'amount': 'amount_raw'})
+        daily_df['volume'] = daily_df['vol_raw'] * 100
+        daily_df['turnover_amount'] = daily_df['amount_raw'] * 1000
+        daily_df = daily_df.drop(columns=['vol_raw', 'amount_raw'])
+
+        # ts_code → stock_code
         daily_df["stock_code"] = daily_df["ts_code"].apply(_convert_ts_code)
         basic_df["stock_code"] = basic_df["ts_code"].apply(_convert_ts_code)
         adj_df["stock_code"] = adj_df["ts_code"].apply(_convert_ts_code)
 
-        # Merge — only use columns that actually exist in basic_df
-        # Map Tushare column names to DB column names
+        # ── 2. 合并数据 ─────────────────────────────────────────────────
         column_map = {
             "turnover_rate": "turnover_rate",
             "volume_ratio": "volume_ratio",
             "total_mv": "total_mv",
             "pe_ttm": "pe_ttm",
             "ps_ttm": "ps_ttm",
+            "pcf_ttm": "pcf_ttm",
             "pb": "pb",
-            # Tushare uses different names for circulating market value
             "circulating_mv": "circulating_mv",
             "float_mv": "circulating_mv",
             "circ_mv": "circulating_mv",
@@ -415,67 +496,159 @@ def _backfill_single_day(target_date: date, token: str) -> tuple[bool, int, str 
             on="stock_code", how="left",
         )
 
-        adj_latest = adj_df.sort_values("trade_date").groupby("stock_code", sort=False).last().reset_index()
-        merged = merged.merge(adj_latest[["stock_code", "adj_factor"]], on="stock_code", how="left")
+        # 复权因子：取当天（adj_factor 是累计复权因子，当天的值即为当前复权因子）
+        adj_latest = adj_df[adj_df["trade_date"] == tushare_date].groupby(
+            "stock_code", sort=False
+        ).last().reset_index()
+        merged = merged.merge(
+            adj_latest[["stock_code", "adj_factor"]],
+            on="stock_code", how="left",
+        )
 
-        # 后复权
+        # adj_close = close * adj_factor
         merged["adj_close"] = merged["close"] * merged["adj_factor"]
-        merged = merged.sort_values(["stock_code", "trade_date"])
-        merged["prev_adj_close"] = merged.groupby("stock_code")["adj_close"].shift(1)
-
-        # 计算指标
-        for col in ["stock_code", "trade_date", "open", "high", "low", "close", "volume"]:
-            if col not in merged.columns:
-                return False, 0, f"Missing required column: {col}"
-        merged["trade_date"] = pd.to_datetime(merged["trade_date"])
-        merged = merged.sort_values(["stock_code", "trade_date"])
-        merged = IndicatorCalculator.calculate_all(merged)
-
-        # 准备字段
+        # amplitude / limit_up / limit_down
         merged["amplitude"] = (merged["high"] - merged["low"]) / merged["low"] * 100
         merged["change_pct"] = merged["pct_chg"]
         merged["limit_up"] = merged["pct_chg"] >= 9.9
         merged["limit_down"] = merged["pct_chg"] <= -9.9
 
-        # 写 DB
-        record_cols = [
-            "stock_code", "trade_date", "open", "high", "low", "close", "volume",
-            "turnover_amount", "adj_close", "prev_adj_close", "amplitude", "change_pct",
-            "turnover_rate", "volume_ratio", "circulating_mv", "total_mv",
-            "limit_up", "limit_down", "pe_ttm", "ps_ttm", "pcf_ttm", "pb",
-            "ma_5", "ma_10", "ma_20", "ma_30", "ma_60", "ma_cross",
-            "macd_dif", "macd_dea", "macd_hist", "macd_cross",
-            "kdj_k", "kdj_d", "kdj_j", "kdj_cross",
-            "boll_mid", "boll_upper", "boll_lower",
-            "psy", "psyma", "rsi_1", "rsi_2", "rsi_3",
-        ]
-        available_cols = [c for c in record_cols if c in merged.columns]
-        db_df = merged[available_cols].copy()
-        for col in db_df.columns:
-            if col in ("stock_code", "trade_date", "ma_cross", "macd_cross", "kdj_cross"):
-                continue
-            db_df[col] = db_df[col].apply(_na_to_none)
-        db_df["trade_date"] = pd.to_datetime(db_df["trade_date"]).dt.strftime("%Y-%m-%d")
+        trade_date_str = target_date.strftime("%Y-%m-%d")
 
-        engine = _get_engine()
-        with engine.begin() as conn:
-            for record in db_df.to_dict("records"):
-                record_copy = dict(record)
-                stock_code = record_copy.pop("stock_code")
-                trade_date = record_copy.pop("trade_date")
-                insert_data = {k: v for k, v in record_copy.items() if hasattr(StockDaily, k)}
-                insert_data["stock_code"] = stock_code
-                insert_data["trade_date"] = trade_date
-                stmt = pg_insert(StockDaily).values(**insert_data)
-                stmt = stmt.on_conflict_do_update(
-                    index_elements=["stock_code", "trade_date"],
-                    set_=insert_data,
+        # ── 3. 逐股票：读历史 → 追加新数据 → 计算指标 → upsert ─────────
+        upsert_count = 0
+        for _, new_row in merged.iterrows():
+            stock_code = new_row["stock_code"]
+
+            # 3.1 从 DB 读取该股票最新 65 条基础数据（不读指标列，由 calculate_all 重算）
+            with engine.connect() as conn:
+                hist = pd.read_sql(
+                    text("""
+                        SELECT trade_date, open, high, low, close, volume,
+                               turnover_amount, adj_close
+                        FROM stock_daily
+                        WHERE stock_code = :code
+                        ORDER BY trade_date DESC
+                        LIMIT 65
+                    """),
+                    conn,
+                    params={"code": stock_code},
                 )
+
+            # 3.2 构造 66 行 DataFrame（65 条历史 + 1 条新数据）
+            # 只设基础列；指标列由 IndicatorCalculator.calculate_all 全部重新计算
+            # prev_adj_close = 前一日的 adj_close（用于 DB 存储字段）
+            prev_adj = hist.iloc[0]["adj_close"] if len(hist) > 0 else None
+            # 确保 trade_date 类型一致：hist 来自 SQL 是 datetime.date，统一转 Timestamp
+            hist["trade_date"] = pd.to_datetime(hist["trade_date"])
+            new_record = {
+                "trade_date": pd.to_datetime(trade_date_str),
+                "open": new_row["open"],
+                "high": new_row["high"],
+                "low": new_row["low"],
+                "close": new_row["close"],
+                "volume": new_row["volume"],
+                "turnover_amount": new_row["turnover_amount"],
+                "adj_close": new_row["adj_close"],
+                "prev_adj_close": prev_adj,
+            }
+
+            df66 = pd.concat(
+                [hist, pd.DataFrame([new_record])],
+                ignore_index=True,
+            )
+            df66 = df66.sort_values("trade_date").reset_index(drop=True)
+
+            # 3.3 计算技术指标（在整个 66 行窗口上）
+            df66 = IndicatorCalculator.calculate_all(df66)
+
+            # 3.4 提取目标日期那行，写入 DB
+            target_row = df66[df66["trade_date"] == pd.to_datetime(trade_date_str)]
+            if target_row.empty:
+                logger.warning(f"No record for {trade_date_str} after calculation: {stock_code}")
+                continue
+
+            record = target_row.iloc[0].to_dict()
+
+            for col in list(record.keys()):
+                if col in ("stock_code", "trade_date"):
+                    continue
+                record[col] = _na_to_none(record.get(col))
+
+            insert_data = {
+                k: v for k, v in record.items()
+                if hasattr(StockDaily, k)
+            }
+            insert_data["stock_code"] = stock_code
+            insert_data["trade_date"] = trade_date_str
+
+            stmt = pg_insert(StockDaily).values(**insert_data)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["stock_code", "trade_date"],
+                set_=insert_data,
+            )
+            with engine.begin() as conn:
                 conn.execute(stmt)
 
-        return True, len(db_df), None
+            upsert_count += 1
+
+        logger.info(f"DB upsert complete: {upsert_count} stocks")
+
+        # ── 4. 构建缓存：从 DB 查询当天数据，写入 Parquet ───────────────
+        DAILY_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+        # 从 DB 读取当天全市场数据（带完整指标）
+        with engine.connect() as conn:
+            cache_df = pd.read_sql(
+                text("""
+                    SELECT stock_code, trade_date, open, high, low, close, volume,
+                           turnover_amount, adj_close, prev_adj_close, amplitude, change_pct,
+                           turnover_rate, volume_ratio, circulating_mv, total_mv,
+                           limit_up, limit_down, pe_ttm, ps_ttm, pcf_ttm, pb,
+                           ma_5, ma_10, ma_20, ma_30, ma_60,
+                           macd_dif, macd_dea, macd_hist,
+                           kdj_k, kdj_d, kdj_j,
+                           boll_mid, boll_upper, boll_lower,
+                           psy, psyma, rsi_1, rsi_2, rsi_3
+                    FROM stock_daily
+                    WHERE trade_date = :td
+                    ORDER BY stock_code
+                """),
+                conn,
+                params={"td": trade_date_str},
+            )
+
+        if not cache_df.empty:
+            cache_df["trade_date"] = pd.to_datetime(cache_df["trade_date"]).dt.strftime("%Y-%m-%d")
+            parquet_path = DAILY_CACHE_DIR / f"{trade_date_str}.parquet"
+            cache_df.to_parquet(parquet_path, index=False)
+            logger.info(f"Parquet written: {parquet_path} ({len(cache_df)} stocks)")
+
+            # 更新 trading_dates.parquet
+            trading_dates_path = CACHE_DIR / "trading_dates.parquet"
+            if trading_dates_path.exists():
+                dates_df = pd.read_parquet(trading_dates_path)
+                if trade_date_str not in dates_df["trade_date"].values:
+                    dates_df = pd.concat(
+                        [dates_df, pd.DataFrame({"trade_date": [trade_date_str]})],
+                        ignore_index=True,
+                    )
+                    dates_df = dates_df.sort_values("trade_date").reset_index(drop=True)
+                    dates_df.to_parquet(trading_dates_path, index=False)
+                    logger.info(f"Updated trading_dates.parquet with {trade_date_str}")
+            else:
+                pd.DataFrame({"trade_date": [trade_date_str]}).to_parquet(
+                    trading_dates_path, index=False
+                )
+                logger.info(f"Created trading_dates.parquet with {trade_date_str}")
+
+        # ── 5. 获取指数数据 ───────────────────────────────────────────
+        _backfill_index_data(client, target_date)
+
+        return True, upsert_count, None
 
     except Exception as e:
+        logger.exception(f"_backfill_single_day failed: {e}")
         return False, 0, str(e)
 
 

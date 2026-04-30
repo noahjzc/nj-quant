@@ -70,7 +70,18 @@
       "Bash(curl -sL \"https://akshare.akfamily.xyz/data/index.html\")",
       "Bash(curl -sL \"https://akshare.akfamily.xyz/data/stock/stock.html\")",
       "Bash(curl -sL \"https://akshare.akfamily.xyz/data/index/index.html\")",
-      "Bash(curl -sL \"https://akshare.akfamily.xyz/indicator.html\")"
+      "Bash(curl -sL \"https://akshare.akfamily.xyz/indicator.html\")",
+      "Bash(PGPASSWORD=123456 psql:*)",
+      "Bash(.venv/Scripts/pytest:*)",
+      "Bash(.venv/Scripts/python -c \"import signal_pipeline; print\\(signal_pipeline.__file__\\)\")",
+      "Bash(.venv/Scripts/python:*)",
+      "Bash(.venv/Scripts/pip list:*)",
+      "Bash(PYTHONPATH=. .venv/Scripts/python -c \"from signal_pipeline.data_sources.tushare_client import TushareClient; print\\('import ok'\\)\")",
+      "Bash(PYTHONPATH=. .venv/Scripts/python -m pytest tests/signal_pipeline/test_tushare_client.py -v)",
+      "Bash(D:/workspace/code/mine/quant/nj-quant/.venv/Scripts/python:*)",
+      "Bash(.venv/Scripts/pip show:*)",
+      "Bash(D:/workspace/code/mine/quant/nj-quant/.venv/Scripts/pytest:*)",
+      "Bash(PYTHONPATH=\"D:\\\\workspace\\\\code\\\\mine\\\\quant\\\\nj-quant\\\\.worktrees\\\\live-signal\" .venv/Scripts/python -m pytest tests/signal_pipeline/test_tushare_client.py -v)"
     ],
     "defaultMode": "auto"
   }

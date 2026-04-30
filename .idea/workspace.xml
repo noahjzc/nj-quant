@@ -5,8 +5,19 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="ba9c56f9-9fae-4e2f-bc58-82725a66fec3" name="Changes" comment="feat(rotation): 添加新股过滤和创业板涨跌幅调整功能&#10;&#10;- 在配置中新增 exclude_new_stocks 选项用于过滤新股&#10;- 修改股票池过滤逻辑支持按日期判断创业板涨跌幅限制&#10;- 2020年8月24日后创业板涨跌幅从10%放宽至20%&#10;- 更新Optuna优化器支持study名称配置和存在时加载&#10;- 优化回测性能并改进缓存机制减少数据库查询">
+      <change beforePath="$PROJECT_DIR$/.claude/settings.local.json" beforeDir="false" afterPath="$PROJECT_DIR$/.claude/settings.local.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/back_testing/rotation/daily_rotation_engine.py" beforeDir="false" afterPath="$PROJECT_DIR$/back_testing/rotation/daily_rotation_engine.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/deploy/crontab.txt" beforeDir="false" afterPath="$PROJECT_DIR$/deploy/crontab.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/signal_pipeline/batch_backfill.py" beforeDir="false" afterPath="$PROJECT_DIR$/signal_pipeline/batch_backfill.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/signal_pipeline/night_backfill.py" beforeDir="false" afterPath="$PROJECT_DIR$/signal_pipeline/night_backfill.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/frontend/src/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/web/frontend/src/App.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/frontend/src/pages/CronTracker/index.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/web/frontend/src/pages/CronTracker/index.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/frontend/src/pages/DataBrowser/index.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/web/frontend/src/pages/DataBrowser/index.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/frontend/src/pages/Positions/index.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/web/frontend/src/pages/Positions/index.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/frontend/src/pages/SignalTable/index.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/web/frontend/src/pages/SignalTable/index.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/server/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/web/server/main.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -45,10 +56,12 @@
   "keyToString": {
     "ASKED_MARK_IGNORED_FILES_AS_EXCLUDED": "true",
     "Python.main.executor": "Run",
+    "Python.night_backfill.executor": "Debug",
     "Python.run_backtest.executor": "Run",
     "Python.run_composite_backtest.executor": "Run",
     "Python.run_full_backtest.executor": "Run",
     "Python.run_optimization.executor": "Debug",
+    "Python.signal_pipeline.batch_backfill.executor": "Debug",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.git.unshallow": "true",
     "git-widget-placeholder": "dev",
@@ -60,6 +73,11 @@
     "nodejs_package_manager_path": "npm",
     "settings.editor.selected.configurable": "editor.preferences.fonts.default",
     "vue.rearranger.settings.migration": "true"
+  },
+  "keyToStringList": {
+    "DatabaseDriversLRU": [
+      "postgresql"
+    ]
   }
 }]]></component>
   <component name="RecentsManager">
@@ -72,30 +90,7 @@
       <recent name="D:\workspace\code\mine\quant\nj-quant\doc" />
     </key>
   </component>
-  <component name="RunManager" selected="Python.run_optimization">
-    <configuration name="main" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
-      <module name="nj-quant" />
-      <option name="ENV_FILES" value="" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <envs>
-        <env name="PYTHONUNBUFFERED" value="1" />
-      </envs>
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/main.py" />
-      <option name="PARAMETERS" value="" />
-      <option name="SHOW_COMMAND_LINE" value="false" />
-      <option name="EMULATE_TERMINAL" value="false" />
-      <option name="MODULE_MODE" value="false" />
-      <option name="REDIRECT_INPUT" value="false" />
-      <option name="INPUT_FILE" value="" />
-      <method v="2" />
-    </configuration>
+  <component name="RunManager" selected="Python.signal_pipeline.batch_backfill">
     <configuration name="run_backtest" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="nj-quant" />
       <option name="ENV_FILES" value="" />
@@ -188,13 +183,44 @@
       <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
+    <configuration name="signal_pipeline.batch_backfill" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="nj-quant" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+        <env name="TUSHARE_TOKEN" value="0b222dd1698c2fa738d66d6652a0c711ed9fe24ee66a5754c1d728e6" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/signal_pipeline" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="signal_pipeline.batch_backfill" />
+      <option name="PARAMETERS" value="--date 2026-04-23" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="true" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <list>
+      <item itemvalue="Python.signal_pipeline.batch_backfill" />
+      <item itemvalue="Python.run_backtest" />
+      <item itemvalue="Python.run_composite_backtest" />
+      <item itemvalue="Python.run_full_backtest" />
+      <item itemvalue="Python.run_optimization" />
+    </list>
     <recent_temporary>
       <list>
+        <item itemvalue="Python.signal_pipeline.batch_backfill" />
         <item itemvalue="Python.run_optimization" />
         <item itemvalue="Python.run_composite_backtest" />
         <item itemvalue="Python.run_full_backtest" />
         <item itemvalue="Python.run_backtest" />
-        <item itemvalue="Python.main" />
       </list>
     </recent_temporary>
   </component>
@@ -228,7 +254,7 @@
       <workItem from="1777102338388" duration="26350000" />
       <workItem from="1777296730598" duration="456000" />
       <workItem from="1777298314034" duration="24825000" />
-      <workItem from="1777432338560" duration="15415000" />
+      <workItem from="1777432338560" duration="29988000" />
     </task>
     <task id="LOCAL-00001" summary="init">
       <option name="closed" value="true" />
@@ -343,6 +369,16 @@
           <line>14</line>
           <option name="timeStamp" value="7" />
         </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/signal_pipeline/night_backfill.py</url>
+          <line>455</line>
+          <option name="timeStamp" value="8" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/signal_pipeline/batch_backfill.py</url>
+          <line>27</line>
+          <option name="timeStamp" value="9" />
+        </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
   </component>
@@ -350,6 +386,7 @@
     <SUITE FILE_PATH="coverage/nj_quant$run_backtest.coverage" NAME="run_backtest Coverage Results" MODIFIED="1776527753792" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/back_testing" />
     <SUITE FILE_PATH="coverage/nj_quant$run_full_backtest.coverage" NAME="run_full_backtest Coverage Results" MODIFIED="1776530129988" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/back_testing" />
     <SUITE FILE_PATH="coverage/nj_quant$run_optimization.coverage" NAME="run_optimization Coverage Results" MODIFIED="1776823470674" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/back_testing/optimization" />
+    <SUITE FILE_PATH="coverage/nj_quant$night_backfill.coverage" NAME="signal_pipeline.batch_backfill Coverage Results" MODIFIED="1777518062792" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/signal_pipeline" />
     <SUITE FILE_PATH="coverage/nj_quant$main.coverage" NAME="main Coverage Results" MODIFIED="1746007726253" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/nj_quant$run_composite_backtest.coverage" NAME="run_composite_backtest Coverage Results" MODIFIED="1776672202191" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/back_testing" />
   </component>
