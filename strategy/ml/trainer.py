@@ -31,10 +31,15 @@ def _get_alpha_columns() -> list:
 class MLRankerTrainer:
     """从 Parquet 缓存构造训练数据并训练 LightGBM 模型"""
 
-    def __init__(self, cache_dir: str, daily_subdir: str = 'daily'):
+    def __init__(self, cache_dir: str, daily_subdir: str = 'daily',
+                 factor_columns: list = None):
         self.cache_dir = Path(cache_dir)
         self.daily_dir = self.cache_dir / daily_subdir
-        self.alpha_columns = _get_alpha_columns()
+        self.factor_columns = factor_columns
+        if factor_columns is None:
+            self.alpha_columns = _get_alpha_columns()
+        else:
+            self.alpha_columns = factor_columns
 
     def build_dataset(
         self,
@@ -99,9 +104,16 @@ class MLRankerTrainer:
         if first_df is None:
             raise ValueError("无有效训练数据")
 
-        canonical_cols = [c for c in self.alpha_columns if c in first_df.columns]
-        if len(canonical_cols) < 50:
-            raise ValueError(f"Alpha 因子列不足: {len(canonical_cols)}")
+        if self.factor_columns is not None:
+            canonical_cols = [c for c in self.factor_columns if c in first_df.columns]
+            if len(canonical_cols) < len(self.factor_columns) * 0.5:
+                raise ValueError(
+                    f"因子列匹配不足: {len(canonical_cols)}/{len(self.factor_columns)}"
+                )
+        else:
+            canonical_cols = [c for c in self.alpha_columns if c in first_df.columns]
+            if len(canonical_cols) < 50:
+                raise ValueError(f"Alpha 因子列不足: {len(canonical_cols)}")
 
         X_chunks = []
         y_chunks = []

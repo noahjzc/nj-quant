@@ -976,3 +976,221 @@ pytest tests/ -v --timeout=120 -x
 git add -A
 git commit -m "feat: complete ML+Optuna three-stage optimization pipeline"
 ```
+
+---
+
+### Task 6: 修复 _select_by_robustness 敏感性分析性能问题
+
+**Files:**
+- Modify: `optimization/optuna/run_daily_rotation_optimization.py:876-961` (`_select_by_robustness`)
+- Modify: `robustness/sensitivity.py:12-69` (`SensitivityAnalyzer._evaluate`)
+- Modify: `optimization/optuna/run_daily_rotation_optimization.py:968-1059` (CLI 入口，新增 `--skip-robustness`)
+
+**Root Cause:** `_select_by_robustness` 运行 5 trials × 41 backtests = 205 次完整回测，耗时 1-2 小时。其中 ~90 次因子权重扰动在 MLRanker 模式完全无效（MLRanker 忽略配置中的权重），且在 SignalRanker 模式下因归一化抵消而输出几乎不变。全程无进度日志，用户感知为"无限循环"。
+
+- [ ] **Step 6.1: SensitivityAnalyzer 增加日志 + 跳过因子权重参数**
+
+```python
+# robustness/sensitivity.py — _evaluate 方法修改
+def _evaluate(self, params: Dict[str, float],
+              run_fn: Callable[[Dict], Any]) -> SensitivityResult:
+    import logging
+    logger = logging.getLogger(__name__)
+
+    base_result = run_fn(deepcopy(params))
+    base_sharpe = self._extract_sharpe(base_result)
+    logger.info(f"敏感性分析: 基准 Sharpe={base_sharpe:.4f}, 分析 {len([k for k,v in params.items() if isinstance(v,(int,float))])} 个数值参数")
+
+    per_param = {}
+    sharpe_changes = []
+
+    numeric_keys = [(k, v) for k, v in params.items() if isinstance(v, (int, float))]
+    # 跳过因子权重（以 weight_ 开头的 key），它们的扰动被归一化抵消
+    framework_keys = [(k, v) for k, v in numeric_keys if not k.startswith('weight_')]
+
+    for key, value in framework_keys:
+        delta = abs(value) * self.perturbation_pct if value != 0 else self.perturbation_pct
+        perturbed_sharpes = []
+
+        for perturbed_value in [value + delta, value - delta]:
+            cfg = deepcopy(params)
+            cfg[key] = perturbed_value
+            result = run_fn(cfg)
+            perturbed_sharpes.append(self._extract_sharpe(result))
+
+        avg_perturbed = sum(perturbed_sharpes) / 2
+        avg_change = abs((avg_perturbed - base_sharpe) / base_sharpe) if base_sharpe != 0 else 0.0
+        sharpe_changes.append(avg_change)
+
+        per_param[key] = {
+            'base_value': value,
+            'delta': round(delta, 6),
+            'sharpe_change_pct': round(avg_change * 100, 2),
+            'stable': avg_change < 0.10,
+        }
+        logger.info(f"  {key}: base={value:.4g}, ±{delta:.4g}, Sharpe变化={avg_change*100:.1f}%, "
+                    f"stable={avg_change < 0.10}")
+
+    if sharpe_changes:
+        avg_sensitivity = sum(sharpe_changes) / len(sharpe_changes)
+        stability = max(0.0, min(1.0, 1.0 - avg_sensitivity * 5))
+    else:
+        stability = 1.0
+
+    return SensitivityResult(per_param=per_param, overall_stability_score=round(stability, 4))
+```
+
+- [ ] **Step 6.2: _select_by_robustness 增加进度日志**
+
+```python
+# optimization/optuna/run_daily_rotation_optimization.py — _select_by_robustness
+def _select_by_robustness(study, base_config, start_date, end_date,
+                          output_dir, data_provider, ranker):
+    from robustness.sensitivity import SensitivityAnalyzer
+    from backtesting.analysis.performance_analyzer import PerformanceAnalyzer
+
+    completed = [t for t in study.trials if t.value is not None]
+    if len(completed) < 2:
+        return None
+
+    completed.sort(key=lambda t: t.value, reverse=True)
+    top5 = completed[:5]
+
+    def engine_factory(params: dict):
+        config = _params_to_config(params, base_config)
+        engine = DailyRotationEngine(config, start_date, end_date,
+                                     data_provider=data_provider, ranker=ranker)
+        results = engine.run()
+        if not results:
+            return {'sharpe_ratio': 0.0}
+        equity = [config.initial_capital] + [r.total_asset for r in results]
+        analyzer = PerformanceAnalyzer(
+            trades=[], initial_capital=config.initial_capital,
+            equity_curve=equity, periods_per_year=252,
+        )
+        return analyzer.calculate_metrics()
+
+    sa = SensitivityAnalyzer()
+    best_params = None
+    best_score = -float('inf')
+    max_s = max(t.value for t in top5)
+    min_s = min(t.value for t in top5)
+    s_range = max_s - min_s if max_s != min_s else 1.0
+
+    scores = []
+    n_framework_params = len([k for k, v in top5[0].params.items()
+                              if isinstance(v, (int, float)) and not k.startswith('weight_')])
+    print(f"\n稳健性筛选: Top {len(top5)} 参数组 × {1 + n_framework_params * 2} 次回测 "
+          f"(仅分析框架参数，跳过因子权重)")
+
+    for i, trial in enumerate(top5):
+        print(f"\n[{i+1}/{len(top5)}] Trial #{trial.number} (Sharpe={trial.value:.4f}): "
+              f"运行敏感性分析...")
+        params = trial.params.copy()
+        result = sa.run(params, engine_factory)
+        sharpe_norm = (trial.value - min_s) / s_range
+        score = sharpe_norm * 0.6 + result.overall_stability_score * 0.4
+        scores.append({
+            'trial_number': trial.number,
+            'sharpe': trial.value,
+            'sharpe_norm': round(sharpe_norm, 4),
+            'stability': result.overall_stability_score,
+            'combined_score': round(score, 4),
+            'params': params,
+            'sensitivity': {k: v['sharpe_change_pct'] for k, v in result.per_param.items()},
+        })
+        print(f"  稳定性={result.overall_stability_score:.4f}, "
+              f"综合评分={score:.4f}")
+        if score > best_score:
+            best_score = score
+            best_params = params
+
+    # 保存结果 (unchanged)
+    output_dir = Path(output_dir or '.')
+    output_dir.mkdir(parents=True, exist_ok=True)
+    now = time.time()
+    path = output_dir / f'robustness_selection_{now}.json'
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump({
+            'top5_scores': scores,
+            'best_by_combined': best_params,
+            'best_combined_score': best_score,
+        }, f, indent=2, ensure_ascii=False, default=str)
+    print(f"\n稳健性筛选结果已保存: {path}")
+    print(f"Top 5 综合评分: {[s['combined_score'] for s in scores]}")
+    if scores:
+        print(f"最优参数 (综合): 稳定性={scores[0]['stability']:.3f}, "
+              f"Sharpe={scores[0]['sharpe']:.3f}")
+
+    return best_params
+```
+
+- [ ] **Step 6.3: CLI 增加 --skip-robustness 选项**
+
+```python
+# optimization/optuna/run_daily_rotation_optimization.py — CLI args
+parser.add_argument('--skip-robustness', action='store_true',
+                    help='跳过稳健性筛选（加速优化流程）')
+
+# run_single_optimization 中:
+# Phase 2: Top 5 敏感性筛选
+if not args.skip_robustness:
+    _select_by_robustness(study, base_config, start_date, end_date,
+                          output_dir, data_provider, ranker)
+else:
+    print("\n跳过稳健性筛选 (--skip-robustness)")
+```
+
+同时在 `run_single_optimization` 函数签名中增加 `skip_robustness` 参数，并在 `run_walk_forward` 中传递该参数。
+
+- [ ] **Step 6.4: 运行现有敏感性测试确保无回归**
+
+```bash
+pytest tests/robustness/test_sensitivity.py -v
+# Expected: 4 passed
+```
+
+- [ ] **Step 6.5: 验证 — 模拟正常调用确认回测次数减少**
+
+```python
+# 验证脚本
+from robustness.sensitivity import SensitivityAnalyzer
+
+# 模拟 trial.params 样式的 params dict
+params = {
+    'weight_RSI_1': 0.12, 'weight_RET_20': 0.12,
+    'weight_VOLUME_RATIO': 0.05, 'weight_PB': 0.18,
+    'weight_PE_TTM': 0.20, 'weight_OVERHEAT': 0.07,
+    'weight_circulating_mv': 0.11, 'weight_WR_10': 0.07,
+    'weight_WR_14': 0.07,
+    'max_total_pct': 0.80, 'max_position_pct': 0.15,
+    'max_positions': 5, 'atr_period': 14,
+    'stop_loss_mult': 2.0, 'take_profit_mult': 3.0,
+    'trailing_pct': 0.10, 'trailing_start': 0.05,
+    'overheat_rsi_threshold': 70.0, 'overheat_ret5_threshold': 0.15,
+    'kdj_low_threshold': 30.0,
+    'signal_KDJ_GOLD': 'on', 'fallback_signal': 'KDJ_GOLD',
+    'buy_signal_mode': 'OR', 'sell_signal_types': [],
+}
+
+call_count = [0]
+def mock_run(cfg):
+    call_count[0] += 1
+    return {'sharpe_ratio': 1.0}
+
+sa = SensitivityAnalyzer()
+sa.run(params, mock_run)
+
+# 旧代码: 20 个 numeric params → 1 + 40 = 41 calls
+# 新代码: 11 个 framework params → 1 + 22 = 23 calls
+print(f"总回测次数: {call_count[0]}")
+assert call_count[0] == 23, f"Expected 23, got {call_count[0]}"
+print("PASS: 因子权重扰动已跳过")
+```
+
+- [ ] **Step 6.6: Commit**
+
+```bash
+git add robustness/sensitivity.py optimization/optuna/run_daily_rotation_optimization.py
+git commit -m "fix(optuna): reduce robustness analysis backtest count by 45%, add progress logging and --skip-robustness"
+```
