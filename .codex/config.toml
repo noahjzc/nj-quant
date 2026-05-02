@@ -1,0 +1,9 @@
+[mcp_servers.firecrawl]
+args = [
+    "-y",
+    "firecrawl-mcp",
+]
+command = "npx"
+
+[mcp_servers.firecrawl.env]
+FIRECRAWL_API_KEY = "fc-6800c71821464e26b2ad79121ad6ff12"

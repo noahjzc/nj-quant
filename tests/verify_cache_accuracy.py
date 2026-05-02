@@ -11,8 +11,8 @@ from pathlib import Path
 # 添加项目根目录到路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from back_testing.data.daily_data_cache import DailyDataCache
-from back_testing.data.data_provider import DataProvider
+from data.cache.daily_data_cache import DailyDataCache
+from data.providers.data_provider import DataProvider
 
 
 def compute_expected(df: pd.DataFrame) -> pd.DataFrame:

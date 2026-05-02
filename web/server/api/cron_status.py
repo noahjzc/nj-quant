@@ -3,7 +3,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from typing import List
 
-from back_testing.data.db.connection import get_session as _get_session
+from data.db.connection import get_session as _get_session
 from web.server.models.schemas import CronLogOut
 
 router = APIRouter()

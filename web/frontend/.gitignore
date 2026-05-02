@@ -1,0 +1,8 @@
+# Environment files (keep .env.example)
+.env
+.env.local
+.env.*.local
+
+# Build output
+node_modules
+dist

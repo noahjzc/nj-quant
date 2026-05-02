@@ -81,7 +81,12 @@
       "Bash(D:/workspace/code/mine/quant/nj-quant/.venv/Scripts/python:*)",
       "Bash(.venv/Scripts/pip show:*)",
       "Bash(D:/workspace/code/mine/quant/nj-quant/.venv/Scripts/pytest:*)",
-      "Bash(PYTHONPATH=\"D:\\\\workspace\\\\code\\\\mine\\\\quant\\\\nj-quant\\\\.worktrees\\\\live-signal\" .venv/Scripts/python -m pytest tests/signal_pipeline/test_tushare_client.py -v)"
+      "Bash(PYTHONPATH=\"D:\\\\workspace\\\\code\\\\mine\\\\quant\\\\nj-quant\\\\.worktrees\\\\live-signal\" .venv/Scripts/python -m pytest tests/signal_pipeline/test_tushare_client.py -v)",
+      "Bash(.venv/Scripts/pip uninstall:*)",
+      "Bash(pytest tests/back_testing/data/sync/test_sync_overview.py -v)",
+      "Bash(npx tsc:*)",
+      "WebFetch(domain:tushare.pro)",
+      "Bash(mmx search:*)"
     ],
     "defaultMode": "auto"
   }

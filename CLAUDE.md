@@ -13,62 +13,92 @@ This is a **quantitative stock trading** system for Chinese markets (A股). It i
 .venv\Scripts\activate  # Windows
 
 # Single daily rotation backtest
-python back_testing/backtest/run_daily_rotation.py --start 2024-01-01 --end 2024-12-31
+python backtesting/run_daily_rotation.py --start 2024-01-01 --end 2024-12-31
 
 # Optuna optimization — single-period
-python back_testing/optimization/run_daily_rotation_optimization.py \
+python optimization/optuna/run_daily_rotation_optimization.py \
     --mode single --start 2024-01-01 --end 2024-12-31 --trials 100
 
 # Optuna optimization — walk-forward
-python back_testing/optimization/run_daily_rotation_optimization.py \
+python optimization/optuna/run_daily_rotation_optimization.py \
     --mode walkforward --start 2022-01-01 --end 2024-12-31 --trials 50
 
 # Run all tests
-pytest tests/back_testing/ -v
+pytest tests/ -v
 
 # Run specific test files
-pytest tests/back_testing/rotation/test_overheat.py -v
-pytest tests/back_testing/optimization/test_daily_rotation_optuna.py -v
-pytest tests/back_testing/test_multi_factor_selector.py -v
+pytest tests/strategy/rotation/test_overheat.py -v
+pytest tests/optimization/optuna/test_daily_rotation_optuna.py -v
+pytest tests/strategy/factors/test_multi_factor_selector.py -v
 ```
 
 ## Architecture
 
 ```
-back_testing/
-├── rotation/                     # Daily rotation engine (active system)
-│   ├── daily_rotation_engine.py  # Core engine: Master DataFrame cache, vectorized signals
-│   ├── config.py                 # RotationConfig, MarketRegimeConfig dataclasses
-│   ├── market_regime.py          # Market state detector (strong/neutral/weak)
-│   ├── position_manager.py       # Position sizing with regime-aware limits
-│   ├── trade_executor.py         # Trade execution and TradeRecord
-│   ├── signal_engine/
-│   │   ├── signal_filter.py      # Buy/sell signal detection (14 signal types)
-│   │   └── signal_ranker.py      # Multi-factor weighted ranking with z-score
-│   └── strategy.py               # Strategy interface
-├── optimization/                 # Parameter optimization
-│   ├── run_daily_rotation_optimization.py  # Optuna CLI (single/walkforward)
-│   └── run_optimization.py       # Composite rotator optimization
-├── data/                         # Data access layer
-│   ├── data_provider.py          # Direct PostgreSQL access (SQLAlchemy)
-│   ├── daily_data_cache.py       # Parquet cache + CachedProvider (cross-trial reuse)
-│   └── db/                       # Database models and connection
-├── analysis/                     # Performance analysis
-│   ├── performance_analyzer.py   # Sharpe, Calmar, max drawdown, win rate
-│   └── visualizer.py             # Charts and HTML reports
-├── backtest/                     # Entry points
-│   ├── run_daily_rotation.py     # Single daily rotation backtest
-│   ├── run_composite_backtest.py # Legacy composite backtest
-│   └── run_rotator_backtest.py   # Legacy rotator backtest
-├── risk/                         # Risk management
-│   ├── risk_manager.py
-│   ├── position_manager.py
-│   └── stop_loss_strategies.py   # ATR stop-loss/take-profit, trailing stop
-├── factors/                      # Factor utilities
-│   ├── factor_utils.py           # FactorProcessor (rank, zscore, winsorize)
-│   └── factor_loader.py          # Load stock factor data
-├── selectors/                    # Stock selection (legacy)
-└── core/                         # Core backtest engine (legacy)
+nj-quant/
+├── backtesting/                  # 回测引擎（通用框架）
+│   ├── run_daily_rotation.py    # 入口脚本
+│   ├── analysis/                # 性能分析、可视化
+│   │   ├── performance_analyzer.py
+│   │   └── visualizer.py
+│   └── risk/                    # 风险管理
+│       ├── risk_manager.py
+│       ├── position_manager.py
+│       └── stop_loss_strategies.py
+│
+├── strategy/                     # 策略定义
+│   ├── rotation/                # 每日轮转策略
+│   │   ├── daily_rotation_engine.py  # Core engine: Master DataFrame cache, vectorized signals
+│   │   ├── config.py            # RotationConfig, MarketRegimeConfig dataclasses
+│   │   ├── market_regime.py     # Market state detector (strong/neutral/weak)
+│   │   ├── position_manager.py  # Position sizing with regime-aware limits
+│   │   ├── trade_executor.py    # Trade execution and TradeRecord
+│   │   ├── strategy.py          # Strategy interface
+│   │   └── signal_engine/       # 信号引擎
+│   │       ├── signal_filter.py # Buy/sell signal detection (14 signal types)
+│   │       └── signal_ranker.py # Multi-factor weighted ranking with z-score
+│   ├── factors/                 # 因子工具
+│   │   ├── factor_utils.py      # FactorProcessor (rank, zscore, winsorize)
+│   │   └── factor_loader.py     # Load stock factor data
+│   ├── signals/                 # 信号类型定义（预留）
+│   └── ranking/                 # 多因子排名（预留）
+│
+├── data/                        # 数据层统一管理
+│   ├── providers/               # 数据提供者
+│   │   ├── data_provider.py     # Direct PostgreSQL access (SQLAlchemy)
+│   │   └── index_data_provider.py
+│   ├── cache/                   # Parquet 缓存
+│   │   ├── daily_data_cache.py # Parquet cache + CachedProvider (cross-trial reuse)
+│   │   └── build_daily_cache.py
+│   ├── db/                     # 数据库模型
+│   │   ├── models.py
+│   │   └── connection.py
+│   └── sync/                    # 数据同步客户端
+│       ├── akshare_client.py
+│       ├── baostock_client.py
+│       ├── tushare_client.py
+│       └── ...
+│
+├── optimization/                 # 参数优化
+│   └── optuna/                  # Optuna 优化框架
+│       └── run_daily_rotation_optimization.py  # Optuna CLI (single/walkforward)
+│
+├── signal_pipeline/             # 信号生成管线
+│   ├── generators/              # 信号生成
+│   │   ├── signal_generator.py
+│   │   ├── intraday_signal.py
+│   │   └── indicator_calculator.py
+│   └── backfill/               # 数据回填
+│       ├── night_backfill.py
+│       ├── batch_backfill.py
+│       └── data_merger.py
+│
+├── web/                        # 前端 + API
+│   ├── frontend/
+│   └── server/
+│
+├── scripts/                     # 运维脚本
+└── tests/                       # 测试（与源码结构对齐）
 ```
 
 ## Daily Rotation Engine
@@ -109,7 +139,7 @@ Key config groups:
 - Same interface as DataProvider for the three main methods
 - Extra: `get_daily_dataframe(date)` → full market DataFrame (used by engine fast path)
 
-Build cache once before optimization: `DailyDataCache.build(start, end, cache_dir)`
+Build cache once before optimization: `DailyDataCache.build(start, end, cache_dir)` (located at `data/cache/daily_data_cache.py`)
 
 ## Optimization
 

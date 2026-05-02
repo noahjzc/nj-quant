@@ -4,19 +4,152 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="ba9c56f9-9fae-4e2f-bc58-82725a66fec3" name="Changes" comment="feat(rotation): 添加新股过滤和创业板涨跌幅调整功能&#10;&#10;- 在配置中新增 exclude_new_stocks 选项用于过滤新股&#10;- 修改股票池过滤逻辑支持按日期判断创业板涨跌幅限制&#10;- 2020年8月24日后创业板涨跌幅从10%放宽至20%&#10;- 更新Optuna优化器支持study名称配置和存在时加载&#10;- 优化回测性能并改进缓存机制减少数据库查询">
+    <list default="true" id="ba9c56f9-9fae-4e2f-bc58-82725a66fec3" name="Changes" comment="feat(frontend): 完善前端页面功能和优化数据处理流程&#10;&#10;- 实现 Positions、DataBrowser 和 CronTracker 页面的具体功能&#10;- 将 axios 替换为统一的 api 工具类进行请求管理&#10;- 在 SignalTable 中添加交易日期、方向、目标仓位等新字段展示&#10;- 实现信号确认时的价格输入和执行功能&#10;- 移除批量操作功能，简化信号表交互&#10;- 在 App.tsx 中重构路由和菜单组件结构&#10;- 优化 batch_backfill.py 为单日数据处理模式&#10;- 更新 night_backfill.py 中的数据转换和存储逻辑&#10;- 添加指数数据回填功能和数据库模型调整&#10;- 优化单日回填的数据处理流程和缓存构建机制">
       <change beforePath="$PROJECT_DIR$/.claude/settings.local.json" beforeDir="false" afterPath="$PROJECT_DIR$/.claude/settings.local.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/deploy/crontab.txt" beforeDir="false" afterPath="$PROJECT_DIR$/deploy/crontab.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/signal_pipeline/batch_backfill.py" beforeDir="false" afterPath="$PROJECT_DIR$/signal_pipeline/batch_backfill.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/signal_pipeline/night_backfill.py" beforeDir="false" afterPath="$PROJECT_DIR$/signal_pipeline/night_backfill.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/web/frontend/src/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/web/frontend/src/App.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/web/frontend/src/pages/CronTracker/index.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/web/frontend/src/pages/CronTracker/index.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/web/frontend/src/pages/DataBrowser/index.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/web/frontend/src/pages/DataBrowser/index.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/web/frontend/src/pages/Positions/index.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/web/frontend/src/pages/Positions/index.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/web/frontend/src/pages/SignalTable/index.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/web/frontend/src/pages/SignalTable/index.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/analysis/performance_analyzer.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/analysis/visualizer.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/backtest/run_backtest.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/backtest/run_composite_backtest.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/backtest/run_daily_rotation.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/backtest/run_full_backtest.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/backtest/run_rotator_backtest.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/backtest/timing_back_testing.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/base_rotator.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/composite_rotator.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/composite_scorer.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/config/database.ini" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/core/backtest_engine.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/core/portfolio_optimizer.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/data/build_daily_cache.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/data/daily_data_cache.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/data/data_provider.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/data/db/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/data/db/connection.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/data/db/models.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/data/index_data_provider.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/data/scripts/setup_database.sql" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/data/scripts/setup_scheduled_tasks.bat" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/data/sync/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/data/sync/akshare_client.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/data/sync/backfill_overview.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/data/sync/baostock_client.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/data/sync/daily_update.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/data/sync/import_index_from_csv.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/data/sync/import_overview_data.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/data/sync/init_history.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/factors/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/factors/factor_config.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/factors/factor_loader.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/factors/factor_utils.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/chromosome.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/crossover.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/elite.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/fitness.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/mutation.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/optimizer.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/population.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/selection.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/sensitivity.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/genetic_optimizer/walk_forward.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/rotation_ga_fitness.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/run_daily_rotation_optimization.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/optimization/run_optimization.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/portfolio_backtest.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/portfolio_rotator.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/risk/position_manager.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/risk/risk_manager.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/risk/stop_loss_strategies.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/rotation/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/rotation/config.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/rotation/daily_rotation_engine.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/rotation/market_regime.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/rotation/position_manager.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/rotation/signal_engine/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/rotation/signal_engine/base_signal.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/rotation/signal_engine/signal_filter.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/rotation/signal_engine/signal_ranker.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/rotation/strategy.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/rotation/trade_executor.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/selectors/composite_selector.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/selectors/multi_factor_selector.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/selectors/stock_selector.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/signal_scorer.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/strategies/bollinger_strategy.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/strategies/combined_strategy.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/strategies/kdj_strategy.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/strategies/ma_strategy.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/strategies/macd_strategy.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/strategies/multi_rsi_strategy.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/strategies/rsi_strategy.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/strategies/trend_confirmation_strategy.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/strategies/volume_strategy.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/back_testing/strategy_evaluator.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/Column_Description.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/doc/量化.xmind" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/fetch_data/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/fetch_data/main.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/signal_pipeline/batch_backfill.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/signal_pipeline/data_merger.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/signal_pipeline/data_sources/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/signal_pipeline/data_sources/akshare_client.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/signal_pipeline/data_sources/tushare_client.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/signal_pipeline/indicator_calculator.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/signal_pipeline/intraday_signal.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/signal_pipeline/night_backfill.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/signal_pipeline/schema.sql" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/signal_pipeline/signal_generator.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/strategy/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/strategy/abstract_strategy.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/strategy/first_strategy.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/data/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/data/test_akshare_client.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/data/test_init_history.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/optimization/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/optimization/test_chromosome.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/optimization/test_daily_rotation_optuna.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/optimization/test_fitness.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/optimization/test_genetic_operators.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/optimization/test_optimizer.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/optimization/test_optuna_new_params.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/optimization/test_population.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/rotation/test_config_defaults.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/rotation/test_engine_new_signals.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/rotation/test_overheat.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/rotation/test_signal_filter.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/rotation/test_signal_types.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/test_composite_scorer.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/test_composite_selector.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/test_factor_loader.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/test_factor_utils.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/test_index_data_provider.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/test_multi_factor_selector.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/test_performance_analyzer.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/test_position_manager.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/test_risk_manager.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/test_signal_scorer.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/test_stock_selector.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/back_testing/test_strategy_evaluator.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/signal_pipeline/test_akshare_client.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/signal_pipeline/test_batch_backfill.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/signal_pipeline/test_data_merger.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/signal_pipeline/test_indicator_calculator.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/signal_pipeline/test_intraday_signal.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/signal_pipeline/test_night_backfill.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/signal_pipeline/test_signal_generator.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/signal_pipeline/test_tushare_client.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/verify_cache_accuracy.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/verify_cache_accuracy.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/frontend/src/utils/api.ts" beforeDir="false" afterPath="$PROJECT_DIR$/web/frontend/src/utils/api.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/frontend/vite.config.ts" beforeDir="false" afterPath="$PROJECT_DIR$/web/frontend/vite.config.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/server/api/cron_status.py" beforeDir="false" afterPath="$PROJECT_DIR$/web/server/api/cron_status.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/server/api/data_browser.py" beforeDir="false" afterPath="$PROJECT_DIR$/web/server/api/data_browser.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/server/api/positions.py" beforeDir="false" afterPath="$PROJECT_DIR$/web/server/api/positions.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/server/api/signals.py" beforeDir="false" afterPath="$PROJECT_DIR$/web/server/api/signals.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/web/server/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/web/server/main.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -71,7 +204,7 @@
     "node.js.selected.package.eslint": "(autodetect)",
     "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "npm",
-    "settings.editor.selected.configurable": "editor.preferences.fonts.default",
+    "settings.editor.selected.configurable": "http.proxy",
     "vue.rearranger.settings.migration": "true"
   },
   "keyToStringList": {
@@ -254,7 +387,8 @@
       <workItem from="1777102338388" duration="26350000" />
       <workItem from="1777296730598" duration="456000" />
       <workItem from="1777298314034" duration="24825000" />
-      <workItem from="1777432338560" duration="29988000" />
+      <workItem from="1777432338560" duration="41670000" />
+      <workItem from="1777645805082" duration="12237000" />
     </task>
     <task id="LOCAL-00001" summary="init">
       <option name="closed" value="true" />
@@ -328,7 +462,23 @@
       <option name="project" value="LOCAL" />
       <updated>1777454449268</updated>
     </task>
-    <option name="localTasksCounter" value="10" />
+    <task id="LOCAL-00010" summary="feat(frontend): 完善前端页面功能和优化数据处理流程&#10;&#10;- 实现 Positions、DataBrowser 和 CronTracker 页面的具体功能&#10;- 将 axios 替换为统一的 api 工具类进行请求管理&#10;- 在 SignalTable 中添加交易日期、方向、目标仓位等新字段展示&#10;- 实现信号确认时的价格输入和执行功能&#10;- 移除批量操作功能，简化信号表交互&#10;- 在 App.tsx 中重构路由和菜单组件结构&#10;- 优化 batch_backfill.py 为单日数据处理模式&#10;- 更新 night_backfill.py 中的数据转换和存储逻辑&#10;- 添加指数数据回填功能和数据库模型调整&#10;- 优化单日回填的数据处理流程和缓存构建机制">
+      <option name="closed" value="true" />
+      <created>1777539138006</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1777539138006</updated>
+    </task>
+    <task id="LOCAL-00011" summary="feat(frontend): 完善前端页面功能和优化数据处理流程&#10;&#10;- 实现 Positions、DataBrowser 和 CronTracker 页面的具体功能&#10;- 将 axios 替换为统一的 api 工具类进行请求管理&#10;- 在 SignalTable 中添加交易日期、方向、目标仓位等新字段展示&#10;- 实现信号确认时的价格输入和执行功能&#10;- 移除批量操作功能，简化信号表交互&#10;- 在 App.tsx 中重构路由和菜单组件结构&#10;- 优化 batch_backfill.py 为单日数据处理模式&#10;- 更新 night_backfill.py 中的数据转换和存储逻辑&#10;- 添加指数数据回填功能和数据库模型调整&#10;- 优化单日回填的数据处理流程和缓存构建机制">
+      <option name="closed" value="true" />
+      <created>1777539142400</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1777539142400</updated>
+    </task>
+    <option name="localTasksCounter" value="12" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -354,7 +504,8 @@
     <MESSAGE value="refactor(data): 优化日线数据缓存加载策略以避免内存溢出&#10;&#10;- 将一次性全量加载改为按日分批查询写入&#10;- 每日期数据单独查询后立即释放内存，避免OOM问题&#10;- 实现增量构建机制，已存在的daily文件自动跳过&#10;- 重构缓存目录结构为平坦结构，daily文件直接写入{cache_dir}/daily/&#10;- 更新交易日列表生成逻辑，从已缓存文件收集而非数据库查询&#10;- 将日志输出方式从logger改为print，优化进度显示&#10;- 添加详细的函数文档说明新的加载策略和缓存复用机制" />
     <MESSAGE value="perf(data): 优化回测性能并改进缓存机制&#10;&#10;- 实现 DailyDataCache 和 CachedProvider 替代实时数据库查询&#10;- 添加预加载缓存机制将30天历史数据打包为单个Parquet文件&#10;- 避免每个Trial重复读取30+个日文件，显著提升并行优化速度&#10;- 支持命令行参数配置缓存目录和禁用缓存选项&#10;- 重构优化目标函数以利用缓存数据提供器&#10;- 添加详细的算法说明文档和参数采样策略注释" />
     <MESSAGE value="feat(rotation): 添加新股过滤和创业板涨跌幅调整功能&#10;&#10;- 在配置中新增 exclude_new_stocks 选项用于过滤新股&#10;- 修改股票池过滤逻辑支持按日期判断创业板涨跌幅限制&#10;- 2020年8月24日后创业板涨跌幅从10%放宽至20%&#10;- 更新Optuna优化器支持study名称配置和存在时加载&#10;- 优化回测性能并改进缓存机制减少数据库查询" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat(rotation): 添加新股过滤和创业板涨跌幅调整功能&#10;&#10;- 在配置中新增 exclude_new_stocks 选项用于过滤新股&#10;- 修改股票池过滤逻辑支持按日期判断创业板涨跌幅限制&#10;- 2020年8月24日后创业板涨跌幅从10%放宽至20%&#10;- 更新Optuna优化器支持study名称配置和存在时加载&#10;- 优化回测性能并改进缓存机制减少数据库查询" />
+    <MESSAGE value="feat(frontend): 完善前端页面功能和优化数据处理流程&#10;&#10;- 实现 Positions、DataBrowser 和 CronTracker 页面的具体功能&#10;- 将 axios 替换为统一的 api 工具类进行请求管理&#10;- 在 SignalTable 中添加交易日期、方向、目标仓位等新字段展示&#10;- 实现信号确认时的价格输入和执行功能&#10;- 移除批量操作功能，简化信号表交互&#10;- 在 App.tsx 中重构路由和菜单组件结构&#10;- 优化 batch_backfill.py 为单日数据处理模式&#10;- 更新 night_backfill.py 中的数据转换和存储逻辑&#10;- 添加指数数据回填功能和数据库模型调整&#10;- 优化单日回填的数据处理流程和缓存构建机制" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat(frontend): 完善前端页面功能和优化数据处理流程&#10;&#10;- 实现 Positions、DataBrowser 和 CronTracker 页面的具体功能&#10;- 将 axios 替换为统一的 api 工具类进行请求管理&#10;- 在 SignalTable 中添加交易日期、方向、目标仓位等新字段展示&#10;- 实现信号确认时的价格输入和执行功能&#10;- 移除批量操作功能，简化信号表交互&#10;- 在 App.tsx 中重构路由和菜单组件结构&#10;- 优化 batch_backfill.py 为单日数据处理模式&#10;- 更新 night_backfill.py 中的数据转换和存储逻辑&#10;- 添加指数数据回填功能和数据库模型调整&#10;- 优化单日回填的数据处理流程和缓存构建机制" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -368,16 +519,6 @@
           <url>file://$PROJECT_DIR$/data_processor/price_calculator.py</url>
           <line>14</line>
           <option name="timeStamp" value="7" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/signal_pipeline/night_backfill.py</url>
-          <line>455</line>
-          <option name="timeStamp" value="8" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/signal_pipeline/batch_backfill.py</url>
-          <line>27</line>
-          <option name="timeStamp" value="9" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>

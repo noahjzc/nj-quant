@@ -20,12 +20,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(signals.router, prefix="/api/signals", tags=["signals"])
-app.include_router(positions.router, prefix="/api/positions", tags=["positions"])
-app.include_router(data_browser.router, prefix="/api/data", tags=["data"])
-app.include_router(cron_status.router, prefix="/api/cron", tags=["cron"])
+app.include_router(signals.router, prefix="/signals", tags=["signals"])
+app.include_router(positions.router, prefix="/positions", tags=["positions"])
+app.include_router(data_browser.router, prefix="/data", tags=["data"])
+app.include_router(cron_status.router, prefix="/cron", tags=["cron"])
 
 
-@app.get("/api/health")
+@app.get("/health")
 def health():
     return {"status": "ok", "timestamp": datetime.datetime.now().isoformat()}
