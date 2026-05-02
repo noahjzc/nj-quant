@@ -1054,15 +1054,22 @@ if __name__ == '__main__':
     if args.ml_model:
         from strategy.ml.ml_ranker import MLRanker
         if args.ml_model == 'auto':
-            auto_path = Path(args.output) / 'best_model.pkl'
-            if auto_path.exists():
-                model_path = str(auto_path)
+            auto_model = Path(args.output) / 'best_model.pkl'
+            auto_encoder = Path(args.output) / 'temporal_encoder.pt'
+            if auto_model.exists() and auto_encoder.exists():
+                from strategy.ml.temporal.temporal_ranker import TemporalMLRanker
+                ranker = TemporalMLRanker(str(auto_model), str(auto_encoder))
+                model_path = str(auto_model)
+                print(f"时序增强排名器自动发现: encoder={auto_encoder}, model={auto_model}")
+            elif auto_model.exists():
+                model_path = str(auto_model)
                 print(f"ML 排名器自动发现: {model_path}")
             else:
-                print(f"警告: 未找到 {auto_path}，回退到 SignalRanker")
+                print(f"警告: 未找到模型文件 {auto_model}，回退到 SignalRanker")
         else:
             model_path = args.ml_model
-        if model_path:
+
+        if model_path and ranker is None:
             ranker = MLRanker(model_path)
             print(f"ML 排名器已加载: {model_path}")
 

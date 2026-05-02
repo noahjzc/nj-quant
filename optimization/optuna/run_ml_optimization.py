@@ -50,6 +50,8 @@ def main():
     parser.add_argument('--storage', default=None, help='Optuna 持久化存储URL')
     parser.add_argument('--study-name', default=None, help='Optuna Study 名称')
     parser.add_argument('--verbose', action='store_true')
+    parser.add_argument('--encoder', default=None,
+                        help='预训练 TemporalEncoder 路径 (.pt)，用于时序特征增强')
 
     args = parser.parse_args()
 
@@ -65,6 +67,18 @@ def main():
     else:
         factor_columns = _get_all_alpha_columns()
         print(f"因子列: {len(factor_columns)} (全量 Alpha158)")
+
+    if args.encoder and Path(args.encoder).exists():
+        # 时序模式: Encoder 提取特征 + LightGBM 直接训练（不经过 Optuna）
+        from strategy.ml.temporal.temporal_trainer import TemporalTrainer
+        trainer = TemporalTrainer(args.cache_dir, args.encoder)
+        model_path = trainer.train(
+            train_start=args.train_start,
+            train_end=args.train_end,
+            output_path=args.output,
+        )
+        print(f"\n时序增强模型已保存: {model_path}")
+        return  # 时序模式不跑 Optuna，直接结束
 
     run_ml_optimization(
         train_start=args.train_start,

@@ -9,6 +9,18 @@ tushare>=1.3.0
 # Data processing
 pandas>=2.0.0
 numpy>=1.24.0
+scipy>=1.10.0
+
+# ML / Modeling
+lightgbm>=4.0.0
+joblib>=1.3.0
+scikit-learn>=1.3.0
+
+# Deep Learning (Temporal Feature Layer)
+torch>=2.0.0
+
+# Optimization
+optuna>=3.0.0
 
 # Backtesting
 python-dateutil>=2.8.0
