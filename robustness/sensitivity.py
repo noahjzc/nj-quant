@@ -23,16 +23,24 @@ class SensitivityAnalyzer:
 
     def _evaluate(self, params: Dict[str, float],
                   run_fn: Callable[[Dict], Any]) -> SensitivityResult:
+        import logging
+        logger = logging.getLogger(__name__)
+
         base_result = run_fn(deepcopy(params))
         base_sharpe = self._extract_sharpe(base_result)
 
         per_param = {}
         sharpe_changes = []
 
-        for key, value in params.items():
-            if not isinstance(value, (int, float)):
-                continue
+        numeric_keys = [(k, v) for k, v in params.items() if isinstance(v, (int, float))]
+        # 跳过因子权重 — 扰动后会被重新归一化抵消，且 MLRanker 完全忽略权重
+        framework_keys = [(k, v) for k, v in numeric_keys if not k.startswith('weight_')]
 
+        skipped = len(numeric_keys) - len(framework_keys)
+        logger.info(f"敏感性分析: 基准 Sharpe={base_sharpe:.4f}, "
+                    f"分析 {len(framework_keys)} 个框架参数 (跳过 {skipped} 个因子权重)")
+
+        for key, value in framework_keys:
             delta = abs(value) * self.perturbation_pct if value != 0 else self.perturbation_pct
             perturbed_sharpes = []
 
@@ -48,10 +56,12 @@ class SensitivityAnalyzer:
 
             per_param[key] = {
                 'base_value': value,
-                'delta': delta,
+                'delta': round(delta, 6),
                 'sharpe_change_pct': round(avg_change * 100, 2),
                 'stable': avg_change < 0.10,
             }
+            logger.info(f"  {key}: base={value:.4g}, ±{delta:.4g}, "
+                        f"Sharpe变化={avg_change*100:.1f}%, stable={avg_change < 0.10}")
 
         if sharpe_changes:
             avg_sensitivity = sum(sharpe_changes) / len(sharpe_changes)

@@ -86,7 +86,8 @@
       "Bash(pytest tests/back_testing/data/sync/test_sync_overview.py -v)",
       "Bash(npx tsc:*)",
       "WebFetch(domain:tushare.pro)",
-      "Bash(mmx search:*)"
+      "Bash(mmx search:*)",
+      "WebFetch(domain:deepwiki.com)"
     ],
     "defaultMode": "auto"
   }
