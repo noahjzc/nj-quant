@@ -134,14 +134,16 @@ ALL_SIGNAL_TYPES = ['KDJ_GOLD', 'MACD_GOLD', 'MA_GOLD', 'VOL_GOLD', 'BOLL_BREAK'
 FIXED_FACTOR_DIRECTIONS = RotationConfig().rank_factor_directions
 
 
-def sample_config(trial: optuna.Trial, base_config: RotationConfig = None) -> RotationConfig:
+def sample_config(trial: optuna.Trial, base_config: RotationConfig = None,
+                  factor_directions: dict = None) -> RotationConfig:
     """从 Optuna Trial 采样一个完整的 RotationConfig
 
     这是参数搜索的核心: 将 Optuna 的 suggest_* API 映射到策略配置的每个字段。
-    共采样 14 个可优化参数 + 8 个因子权重。
+    共采样 14 个可优化参数 + 动态因子权重。
 
     采样策略:
-    - 因子权重: 8 个独立采样 [0.01, 0.40]，然后归一化使总和 = 1.0
+    - 因子权重: 从 factor_directions 中动态读取因子列表，每个因子独立采样
+      [0.01, 0.40]，然后归一化使总和 = 1.0
       为什么先独立采样再归一化而非用 Dirichlet 分布?
       → suggest_float 独立采样 + 归一化等价于 Dirichlet(1,1,...,1) 均匀分布，
         且 Optuna 对独立参数的超参空间建模更准确
@@ -153,20 +155,24 @@ def sample_config(trial: optuna.Trial, base_config: RotationConfig = None) -> Ro
     Args:
         trial: Optuna trial 对象，提供 suggest_* 采样接口
         base_config: 基础配置（固定参数从此继承），None 则用默认值
+        factor_directions: 因子方向字典 {因子名: 1/-1}，None 则用 FIXED_FACTOR_DIRECTIONS
 
     Returns:
         采样后的 RotationConfig，可直接传入 DailyRotationEngine
     """
     base = base_config or RotationConfig()
+    directions = factor_directions if factor_directions is not None else FIXED_FACTOR_DIRECTIONS
 
-    # ── 因子权重: 8 个因子独立采样 [0.01, 0.40]，然后归一化 ──
-    # 每个因子权重有独立的下限 0.01（避免某因子被完全淘汰）和上限 0.40（避免单因子过重）
+    # ── 因子权重: 动态因子列表独立采样 [0.01, 0.40]，然后归一化 ──
+    # 当 directions 为空 dict 时（如 MLRanker 模式），跳过权重采样
     raw_weights = {}
-    for factor in FIXED_FACTOR_DIRECTIONS:
+    for factor in directions:
         raw_weights[factor] = trial.suggest_float(f'weight_{factor}', 0.01, 0.40)
-    # 归一化: 确保所有权重之和 = 1.0，使不同 Trial 的权重具有可比性
-    total = sum(raw_weights.values())
-    rank_factor_weights = {k: v / total for k, v in raw_weights.items()}
+    if raw_weights:
+        total = sum(raw_weights.values())
+        rank_factor_weights = {k: v / total for k, v in raw_weights.items()}
+    else:
+        rank_factor_weights = {}
 
     # ── 买入信号开关: 8 个信号各自独立 on/off ──
     active_signals = []
@@ -221,7 +227,7 @@ def sample_config(trial: optuna.Trial, base_config: RotationConfig = None) -> Ro
         buy_signal_mode=buy_signal_mode,
         sell_signal_types=base.sell_signal_types,
         rank_factor_weights=rank_factor_weights,
-        rank_factor_directions=FIXED_FACTOR_DIRECTIONS,
+        rank_factor_directions=directions,
         market_regime=base.market_regime,
         exclude_st=base.exclude_st,
         exclude_limit_up=base.exclude_limit_up,
@@ -253,7 +259,8 @@ def objective(trial: optuna.Trial,
               end_date: str,
               base_config: RotationConfig = None,
               data_provider=None,
-              ranker=None) -> float:
+              ranker=None,
+              factor_directions=None) -> float:
     """Optuna 目标函数: 采样参数 → 运行回测 → 返回年化 Sharpe
 
     这是 Optuna 优化的核心回调。每个 Trial 的完整生命周期:
@@ -278,7 +285,7 @@ def objective(trial: optuna.Trial,
         年化 Sharpe Ratio（供 Optuna 最大化）
     """
     # 1. 从 Trial 采样参数 → 构建本次回测的配置
-    config = sample_config(trial, base_config)
+    config = sample_config(trial, base_config, factor_directions)
 
     try:
         # 2. 创建引擎并运行完整回测
@@ -379,6 +386,8 @@ def run_single_optimization(
     data_provider=None,
     storage_url: str = None,
     ranker=None,
+    skip_robustness: bool = False,
+    factor_directions=None,
 ) -> Tuple[RotationConfig, float, optuna.Study]:
     """单期优化: 在固定日期范围内搜索最优参数
 
@@ -428,7 +437,8 @@ def run_single_optimization(
     )
 
     # 创建目标函数的偏应用版本，闭包捕获固定参数
-    obj = lambda trial: objective(trial, start_date, end_date, base_config, data_provider, ranker)
+    obj = lambda trial: objective(trial, start_date, end_date, base_config,
+                              data_provider, ranker, factor_directions)
     # 启动优化: show_progress_bar=True 显示 tqdm 进度条
     study.optimize(obj, n_trials=n_trials, show_progress_bar=True, n_jobs=n_jobs)
 
@@ -448,8 +458,11 @@ def run_single_optimization(
     _save_results(study, best_config, best_sharpe, start_date, end_date, output_dir)
 
     # Phase 2: Top 5 敏感性筛选 — 在最优候选参数中选最稳健的
-    _select_by_robustness(study, base_config, start_date, end_date,
-                          output_dir, data_provider, ranker)
+    if not skip_robustness:
+        _select_by_robustness(study, base_config, start_date, end_date,
+                              output_dir, data_provider, ranker)
+    else:
+        print("\n跳过稳健性筛选 (--skip-robustness)")
 
     return best_config, best_sharpe, study
 
@@ -467,6 +480,8 @@ def run_walk_forward(
     data_provider=None,
     storage_url: str = None,
     ranker=None,
+    skip_robustness: bool = False,
+    factor_directions=None,
 ) -> List[Dict]:
     """Walk-Forward 滚动优化
 
@@ -541,6 +556,8 @@ def run_walk_forward(
             data_provider=data_provider,
             storage_url=storage_url,
             ranker=ranker,
+            skip_robustness=skip_robustness,
+            factor_directions=factor_directions,
         )
 
         # 4. 测试期评估: 用训练期最优参数在测试期上跑一遍（不优化，纯评估）
@@ -599,11 +616,23 @@ def _params_to_config(params: Dict, base_config: RotationConfig = None) -> Rotat
     base = base_config or RotationConfig()
 
     # 从 params 中提取原始权重并重新归一化
-    # 虽然 best_params 中存的是归一化值，但重新归一化保证精度
-    raw_weights = {factor: params[f'weight_{factor}']
-                   for factor in FIXED_FACTOR_DIRECTIONS}
-    total = sum(raw_weights.values())
-    rank_factor_weights = {k: v / total for k, v in raw_weights.items()}
+    # 动态因子列表: 从 weight_ 前缀的 key 推导，支持可变因子集
+    weight_keys = [k for k in params if k.startswith('weight_')]
+    if weight_keys:
+        # 从 weight_ 键推导因子名
+        factors = [k.replace('weight_', '') for k in weight_keys]
+        raw_weights = {factor: params[f'weight_{factor}'] for factor in factors}
+        total = sum(raw_weights.values())
+        rank_factor_weights = {k: v / total for k, v in raw_weights.items()}
+        # 方向: 优先从 base config 取，否则默认正向
+        rank_factor_directions = {}
+        for factor in factors:
+            rank_factor_directions[factor] = base.rank_factor_directions.get(factor, 1)
+    else:
+        # Fallback: 无权重 key 时使用默认等权重（避免 KeyError）
+        factors = list(FIXED_FACTOR_DIRECTIONS.keys())
+        rank_factor_weights = {f: 1.0 / len(factors) for f in factors}
+        rank_factor_directions = dict(FIXED_FACTOR_DIRECTIONS)
 
     # 重建信号列表: 遍历所有信号，收集状态为 'on' 的
     active_signals = [sig for sig in ALL_SIGNAL_TYPES
@@ -622,7 +651,7 @@ def _params_to_config(params: Dict, base_config: RotationConfig = None) -> Rotat
         buy_signal_mode=params['buy_signal_mode'],
         sell_signal_types=params.get('sell_signal_types', base.sell_signal_types),
         rank_factor_weights=rank_factor_weights,
-        rank_factor_directions=FIXED_FACTOR_DIRECTIONS,
+        rank_factor_directions=rank_factor_directions,
         market_regime=base.market_regime,
         exclude_st=base.exclude_st,
         exclude_limit_up=base.exclude_limit_up,
@@ -744,9 +773,9 @@ def _config_to_dict(config: RotationConfig) -> Dict:
     """
     result: Dict = {}
 
-    # 因子权重: 输出当前归一化值
+    # 因子权重: 输出当前归一化值（使用 config 自身的因子方向）
     # 因为归一化后 sum=1.0，_params_to_config 二次归一化后值不变
-    for factor, direction in FIXED_FACTOR_DIRECTIONS.items():
+    for factor in config.rank_factor_directions:
         result[f'weight_{factor}'] = config.rank_factor_weights.get(
             factor, 0.01 if factor == 'OVERHEAT' else 0.05
         )
@@ -923,8 +952,15 @@ def _select_by_robustness(study: optuna.Study, base_config: RotationConfig,
     min_s = min(t.value for t in top5)
     s_range = max_s - min_s if max_s != min_s else 1.0
 
+    # 预估回测次数并打印进度提示
+    n_framework_params = len([k for k, v in top5[0].params.items()
+                              if isinstance(v, (int, float)) and not k.startswith('weight_')])
+    print(f"\n稳健性筛选: Top {len(top5)} 参数组 x ~{1 + n_framework_params * 2} 次回测")
+
     scores = []
-    for trial in top5:
+    for i, trial in enumerate(top5):
+        print(f"\n[{i+1}/{len(top5)}] Trial #{trial.number} (Sharpe={trial.value:.4f}): "
+              f"运行敏感性分析...")
         params = trial.params.copy()
         result = sa.run(params, engine_factory)
         sharpe_norm = (trial.value - min_s) / s_range
@@ -938,6 +974,8 @@ def _select_by_robustness(study: optuna.Study, base_config: RotationConfig,
             'params': params,
             'sensitivity': {k: v['sharpe_change_pct'] for k, v in result.per_param.items()},
         })
+        print(f"  稳定性={result.overall_stability_score:.4f}, "
+              f"综合评分={score:.4f}")
         if score > best_score:
             best_score = score
             best_params = params
@@ -995,7 +1033,12 @@ if __name__ == '__main__':
     parser.add_argument('--storage', default=None, help='Optuna 持久化存储（如 sqlite:///optuna.db），默认内存模式')
     parser.add_argument('--study-name', default=None, help='Optuna Study 名称（用于 Dashboard 识别和持久化恢复）')
     parser.add_argument('--verbose', action='store_true', help='详细日志')
-    parser.add_argument('--ml-model', default=None, help='ML 模型路径（使用 MLRanker 替代 SignalRanker）')
+    parser.add_argument('--ml-model', default=None,
+                        help='ML 模型路径（使用 MLRanker 替代 SignalRanker，auto=自动发现 best_model.pkl）')
+    parser.add_argument('--factors', default=None,
+                        help='因子列表JSON路径，用于限制引擎计算的因子范围')
+    parser.add_argument('--skip-robustness', action='store_true',
+                        help='跳过稳健性筛选（加速优化流程）')
 
     args = parser.parse_args()
 
@@ -1007,10 +1050,47 @@ if __name__ == '__main__':
 
     # ── ML 排名器（可选）──
     ranker = None
+    model_path = None
     if args.ml_model:
         from strategy.ml.ml_ranker import MLRanker
-        ranker = MLRanker(args.ml_model)
-        print(f"ML 排名器已加载: {args.ml_model}")
+        if args.ml_model == 'auto':
+            auto_path = Path(args.output) / 'best_model.pkl'
+            if auto_path.exists():
+                model_path = str(auto_path)
+                print(f"ML 排名器自动发现: {model_path}")
+            else:
+                print(f"警告: 未找到 {auto_path}，回退到 SignalRanker")
+        else:
+            model_path = args.ml_model
+        if model_path:
+            ranker = MLRanker(model_path)
+            print(f"ML 排名器已加载: {model_path}")
+
+    # ── 动态因子方向（可选）──
+    factor_directions = None
+    if args.factors and Path(args.factors).exists():
+        with open(args.factors, 'r', encoding='utf-8') as f:
+            factor_data = json.load(f)
+        raw_factors = factor_data.get('raw', [])
+        if raw_factors and ranker is None:
+            # SignalRanker 模式: 从 IC report 推断方向
+            ic_path = Path(args.output) / 'factor_ic_report.csv'
+            if ic_path.exists():
+                ic_df = pd.read_csv(ic_path, index_col=0)
+                factor_directions = {}
+                for f in raw_factors:
+                    if f in ic_df.index:
+                        factor_directions[f] = 1 if ic_df.loc[f, 'ic_mean'] > 0 else -1
+                print(f"因子方向已加载: {len(factor_directions)} 个因子 (来源: IC report)")
+            else:
+                factor_directions = {f: 1 for f in raw_factors}
+                print(f"因子方向已加载: {len(factor_directions)} 个因子 (默认正向)")
+            base_config.rank_factor_weights = {f: 1.0 / len(raw_factors) for f in raw_factors}
+            base_config.rank_factor_directions = factor_directions
+        elif raw_factors and ranker is not None:
+            # MLRanker 模式: 因子权重由模型内部处理，不进入 Optuna 搜索空间
+            factor_directions = {}  # 空 dict → sample_config 跳过权重采样
+            print(f"ML 模式因子列表: {len(raw_factors)} 个因子 (权重由模型决定)")
 
     # ── 构建 / 读取 Parquet 缓存 ──
     # DailyDataCache.build() 是增量构建: 已存在的 daily 文件自动跳过
@@ -1041,6 +1121,8 @@ if __name__ == '__main__':
             data_provider=cached_provider,
             storage_url=args.storage,
             ranker=ranker,
+            skip_robustness=args.skip_robustness,
+            factor_directions=factor_directions,
         )
     else:
         run_walk_forward(
@@ -1056,4 +1138,6 @@ if __name__ == '__main__':
             data_provider=cached_provider,
             storage_url=args.storage,
             ranker=ranker,
+            skip_robustness=args.skip_robustness,
+            factor_directions=factor_directions,
         )
