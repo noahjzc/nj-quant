@@ -85,3 +85,18 @@ class TemporalEncoder(nn.Module):
         x = self.pool(x)
         x = x.squeeze(-1)
         return x
+
+    def forward_sequence(
+        self,
+        x: torch.Tensor,
+        src_key_padding_mask: torch.Tensor = None,
+    ) -> torch.Tensor:
+        """不池化版本，保留每个时间步的特征，用于序列级预测任务（如遮罩重建）。
+
+        Returns:
+            (batch, seq_len, d_model)
+        """
+        x = self.input_proj(x)
+        x = self.pos_encoding(x)
+        x = self.encoder(x, src_key_padding_mask=src_key_padding_mask)
+        return x

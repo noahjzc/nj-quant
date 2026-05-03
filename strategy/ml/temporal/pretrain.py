@@ -32,6 +32,7 @@ class MaskedFactorDataset(Dataset):
         dates = [d for d in all_dates if start <= d <= end]
 
         self.samples = []
+        cols = None
         for date_str in dates:
             idx = date_to_idx[date_str]
             if idx < seq_len - 1:
@@ -40,7 +41,6 @@ class MaskedFactorDataset(Dataset):
 
             daily_dfs = {}
             stock_sets = []
-            cols = None
             for d in window_dates:
                 p = self.daily_dir / f'{d}.parquet'
                 if not p.exists():
@@ -67,6 +67,12 @@ class MaskedFactorDataset(Dataset):
                             seq.append(np.zeros(len(cols), dtype=np.float32))
                     self.samples.append(np.stack(seq))
 
+        # 计算 per-factor 归一化参数
+        all_data = np.concatenate([s.reshape(-1, len(cols)) for s in self.samples], axis=0)
+        self.factor_mean = np.nanmean(all_data, axis=0).astype(np.float32)
+        self.factor_std = np.nanstd(all_data, axis=0).astype(np.float32)
+        self.factor_std[self.factor_std < 1e-8] = 1.0  # 避免除零
+
         logger.info(f"预训练数据集: {len(self.samples)} 条序列, "
                      f"{len(cols)} 个因子, {seq_len} 天窗口")
 
@@ -75,6 +81,10 @@ class MaskedFactorDataset(Dataset):
 
     def __getitem__(self, idx):
         x = torch.tensor(self.samples[idx], dtype=torch.float32)
+        # z-score 归一化
+        x = (x - torch.tensor(self.factor_mean)) / torch.tensor(self.factor_std)
+        x = torch.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0)
+        # 随机遮罩
         mask = torch.rand(x.shape) < self.mask_ratio
         masked_x = x.clone()
         masked_x[mask] = 0.0
@@ -110,36 +120,58 @@ def pretrain(
         n_layers=n_layers, max_len=seq_len,
     ).to(device)
 
-    # 简单的重建损失: 对整个序列做编码 → 预测 → MSE
-    loss_fn = nn.MSELoss()
-    optimizer = torch.optim.AdamW(encoder.parameters(), lr=lr)
+    # 预测头: 从 d_model 特征空间映射回 M 维因子值
+    # 对每个时间步做预测 → 只计算被遮位置的 MSE
+    pred_head = nn.Sequential(
+        nn.Linear(d_model, d_model * 2),
+        nn.GELU(),
+        nn.Linear(d_model * 2, M),
+    ).to(device)
+
+    optimizer = torch.optim.AdamW(
+        list(encoder.parameters()) + list(pred_head.parameters()), lr=lr
+    )
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
     encoder.train()
+    pred_head.train()
     for epoch in range(epochs):
         total_loss = 0.0
+        n_batches = 0
         for masked_x, target, mask in loader:
-            masked_x = masked_x.to(device)
-            # 简单自监督: 编码被遮的序列，用 hidden states 做重建
-            # 用 encoder 的中间表示做预测
-            encoder.train()
-            # 编码被遮序列
-            features = encoder(masked_x)  # (B, d_model)
-            # 损失: 让特征能区分不同序列模式（对比学习简化版）
-            # 加上一个小的重建辅助损失
-            with torch.no_grad():
-                target_encoded = encoder(target.to(device))
-            # 让被遮序列的特征接近未遮序列的特征
-            loss = loss_fn(features, target_encoded)
+            masked_x = masked_x.to(device)        # (B, T, M)
+            target_val = target.to(device)         # (B, T, M) — 原始因子值
+            mask = mask.to(device)                 # (B, T, M) — True=被遮
+
+            # 编码 → 每个时间步的特征: (B, T, d_model)
+            # TransformerEncoder 输出 (B, T, d_model)，不加全局池化
+            features_seq = encoder.forward_sequence(masked_x)  # (B, T, d_model)
+
+            # 预测每个时间步的因子值: (B, T, M)
+            pred = pred_head(features_seq)
+
+            # 只计算被遮位置的 MSE
+            masked_pred = pred[mask]
+            masked_target = target_val[mask]
+
+            if masked_pred.numel() == 0:
+                continue
+
+            loss = nn.functional.mse_loss(masked_pred, masked_target)
 
             optimizer.zero_grad()
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(
+                list(encoder.parameters()) + list(pred_head.parameters()), max_norm=1.0
+            )
             optimizer.step()
             total_loss += loss.item()
+            n_batches += 1
 
         scheduler.step()
         if (epoch + 1) % 10 == 0:
-            logger.info(f"  Epoch {epoch+1}/{epochs}, loss={total_loss/len(loader):.6f}")
+            avg_loss = total_loss / max(n_batches, 1)
+            logger.info(f"  Epoch {epoch+1}/{epochs}, loss={avg_loss:.6f}")
 
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -149,6 +181,8 @@ def pretrain(
             'n_features': M, 'd_model': d_model, 'n_heads': n_heads,
             'n_layers': n_layers, 'max_len': seq_len,
             'factor_columns': factor_columns,
+            'factor_mean': dataset.factor_mean.tolist(),
+            'factor_std': dataset.factor_std.tolist(),
         },
     }, output_path)
     logger.info(f"预训练完成，模型已保存: {output_path}")

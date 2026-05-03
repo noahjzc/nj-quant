@@ -1,99 +1,163 @@
 # nj-quant
 
-A股日频轮动量化回测系统 —— 基于多因子排序与信号检测的每日调仓策略，支持 Optuna 贝叶斯参数优化。
+A-share quantitative trading system — daily rotation backtesting, multi-factor ranking, ML-based stock selection, Optuna hyperparameter optimization, and temporal feature learning.
 
-## 核心特性
+## Features
 
-- **日频轮动引擎** — 逐日处理：市场状态检测 → 信号特征构建 → 卖出检查 → 候选排序 → 买入分配，两阶段执行（先卖后买）
-- **14 种买卖信号** — MA、MACD、RSI、KDJ、PSY 等技术指标信号检测，支持 AND/OR 组合模式
-- **多因子加权排名** — z-score 标准化 + 方向调整的加权求和，因子权重可通过 Optuna 自动寻优
-- **市场状态感知** — 强/中/弱三档市场分型，动态调整仓位上限与风控参数
-- **风险管理** — ATR 止损/止盈、移动止损、过热惩罚（RSI + 5日涨幅阈值）
-- **Optuna 优化** — TPE 贝叶斯搜索，支持单期优化与滚动窗口（walk-forward）验证
-- **Parquet 缓存** — 优化阶段数据预构建为 Parquet，多 trial 零数据库查询
+- **Daily Rotation Engine** — Vectorized signal generation, two-phase trade execution, market regime detection
+- **Alpha158 Factors** — 156 financial factors (KBar, Price ratios, Rolling operators across 5 time windows)
+- **Factor Screening & Orthogonalization** — Rank IC analysis, Gram-Schmidt decorrelation, dual output (raw + orthogonal factor sets)
+- **ML Ranking** — LightGBM model training and inference, Optuna hyperparameter optimization
+- **Temporal Feature Layer** — Transformer Encoder pretrained via self-supervised masked prediction, combined with LightGBM for cross-sectional ranking
+- **Optuna Optimization** — TPE-based Bayesian optimization, single-period and walk-forward modes, robustness-based selection
+- **Robustness Testing** — Monte Carlo simulation, CSCV, deflated Sharpe, parameter sensitivity analysis
+- **Web Dashboard** — FastAPI backend + Vite/React frontend for signal monitoring and data browsing
 
-## 快速开始
+## Quick Start
 
 ```bash
-# 创建虚拟环境
+# Clone and setup
+git clone <repo-url> && cd nj-quant
 python -m venv .venv
 .venv\Scripts\activate  # Windows
-pip install -r requirements.txt
+pip install -e .
+pip install -e ".[dev]"  # for testing
 
-# 如需 Optuna 优化（可选）
-pip install optuna
+# Configure database
+cp config/database.example.ini config/database.ini
+# Edit database.ini with your PostgreSQL credentials
+
+# Build data cache
+python -c "
+from data.cache.daily_data_cache import DailyDataCache
+DailyDataCache.build('2023-01-01', '2024-12-31', 'cache/daily_rotation')
+"
+
+# Run a backtest
+python backtesting/run_daily_rotation.py --start 2024-01-01 --end 2024-12-31
 ```
 
-### 单次回测
+## Optimization Pipeline
 
 ```bash
-python back_testing/backtest/run_daily_rotation.py --start 2024-01-01 --end 2024-12-31
+# Stage 0: Factor screening
+python -m strategy.factors.factor_screening \
+    --start 2020-01-01 --end 2022-12-31 --output output/
+
+# Stage 1: Train ML ranker (with optional temporal encoder)
+python -m strategy.ml.temporal.pretrain \
+    --start 2020-01-01 --end 2022-12-31 \
+    --factors output/selected_factors.json --epochs 50 --output output/
+
+python optimization/optuna/run_ml_optimization.py \
+    --train-start 2020-01-01 --train-end 2022-12-31 \
+    --factors output/selected_factors.json \
+    --encoder output/temporal_encoder.pt --trials 50 --output output/
+
+# Stage 2: Framework optimization (auto-loads best model)
+python optimization/optuna/run_daily_rotation_optimization.py \
+    --mode single --start 2024-01-01 --end 2024-12-31 \
+    --ml-model auto --trials 100 --output output/
 ```
 
-### 参数优化
+## Key CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `nj-quant-backtest` | Run a single daily rotation backtest |
+| `nj-quant-optimize` | Run framework parameter optimization (Optuna) |
+| `nj-quant-ml-optimize` | Run ML hyperparameter optimization |
+| `nj-quant-factor-screen` | Run factor screening and orthogonalization |
+| `nj-quant-pretrain` | Pretrain TemporalEncoder (self-supervised) |
+
+Or run directly:
+
+| Script | Purpose |
+|--------|---------|
+| `python backtesting/run_daily_rotation.py` | Single backtest with analysis |
+| `python optimization/optuna/run_daily_rotation_optimization.py` | Optuna framework optimization |
+| `python optimization/optuna/run_ml_optimization.py` | ML model training + hyperparameter optimization |
+| `python -m strategy.factors.factor_screening` | Factor IC analysis and orthogonalization |
+| `python -m strategy.ml.temporal.pretrain` | Temporal Encoder self-supervised pretraining |
+
+## Architecture
+
+```
+nj-quant/
+├── backtesting/                  # Backtesting framework
+│   ├── run_daily_rotation.py    # CLI entry + result export
+│   ├── analysis/                # Performance analysis & visualization
+│   ├── risk/                    # Risk management (ATR stops, position sizing)
+│   └── costs/                   # Transaction cost models
+├── strategy/                     # Strategy definitions
+│   ├── rotation/                # Daily rotation engine (core)
+│   │   ├── daily_rotation_engine.py
+│   │   ├── config.py            # RotationConfig dataclass
+│   │   └── signal_engine/       # Signal filter + ranker
+│   ├── factors/                 # Factor computation
+│   │   ├── alpha158.py          # 156 Alpha158 factors
+│   │   └── factor_screening.py  # IC analysis + orthogonalization
+│   └── ml/                      # ML ranking
+│       ├── ml_ranker.py         # LightGBM inference
+│       ├── trainer.py           # MLRankerTrainer
+│       ├── ml_optuna.py         # Optuna-based ML hyperparameter optimization
+│       └── temporal/            # Temporal feature layer
+│           ├── encoder.py       # TemporalEncoder (Transformer)
+│           ├── pretrain.py      # Self-supervised pretraining
+│           ├── temporal_ranker.py    # TemporalMLRanker
+│           └── temporal_trainer.py   # Phase 2 joint training
+├── optimization/                 # Parameter optimization
+│   └── optuna/                  # Optuna TPE optimization
+├── data/                        # Data layer (PostgreSQL, Parquet cache)
+├── robustness/                   # Robustness analysis
+├── web/                         # FastAPI backend + React frontend
+├── signal_pipeline/             # Live trading signals
+├── docs/superpowers/            # Design specs + implementation plans
+└── tests/                       # Test suite
+```
+
+## Testing
 
 ```bash
-# 单期优化
-python back_testing/optimization/run_daily_rotation_optimization.py \
-    --mode single --start 2024-01-01 --end 2024-12-31 --trials 100
-
-# 滚动窗口优化
-python back_testing/optimization/run_daily_rotation_optimization.py \
-    --mode walkforward --start 2022-01-01 --end 2024-12-31 --trials 50
+pytest tests/ -v                        # Run all tests
+pytest tests/strategy/ml/temporal/ -v   # Temporal feature layer tests
+pytest tests/robustness/ -v             # Robustness tests
 ```
 
-### 运行测试
+## Tech Stack
 
-```bash
-pytest tests/back_testing/ -v
-```
+| Category | Packages |
+|----------|----------|
+| ML | lightgbm, scikit-learn, joblib |
+| Deep Learning | torch (TemporalEncoder) |
+| Optimization | optuna, scipy |
+| Data | pandas, numpy, sqlalchemy, psycopg2 |
+| Data Sources | akshare, tushare |
+| Web | fastapi, uvicorn, pydantic |
+| Viz | matplotlib, seaborn |
 
-## 项目结构
+Python ≥ 3.10. Full dependency list in `pyproject.toml` or `requirements.txt`.
 
-```
-back_testing/
-├── rotation/                  # 日频轮动引擎（核心）
-│   ├── daily_rotation_engine.py  # 主引擎：向量化信号 + 两阶段执行
-│   ├── config.py                 # RotationConfig 配置数据类
-│   ├── market_regime.py          # 市场状态检测
-│   ├── signal_engine/
-│   │   ├── signal_filter.py      # 买卖信号检测（14种）
-│   │   └── signal_ranker.py      # 多因子加权排名
-│   └── trade_executor.py         # 交易执行与记录
-├── optimization/              # 参数优化
-│   └── run_daily_rotation_optimization.py  # Optuna CLI
-├── data/                      # 数据层
-│   ├── data_provider.py       # PostgreSQL 直连（SQLAlchemy）
-│   └── daily_data_cache.py    # Parquet 缓存（优化用）
-├── analysis/                  # 绩效分析
-│   ├── performance_analyzer.py   # Sharpe/Calmar/回撤/胜率
-│   └── visualizer.py
-├── risk/                      # 风险管理
-│   └── stop_loss_strategies.py   # ATR止损/移动止损
-├── factors/                   # 因子工具
-│   └── factor_utils.py        # 排名/z-score/缩尾处理
-├── backtest/                  # 入口脚本
-└── core/                      # 遗留回测引擎
-```
+## Design Docs
 
-## 技术栈
+Key specifications in `docs/superpowers/specs/`:
 
-- **Python 3.12+**
-- **Pandas / NumPy** — 数据处理与向量化计算
-- **SQLAlchemy + PostgreSQL** — 行情数据存储
-- **Optuna** — 贝叶斯超参数优化
-- **AkShare / Tushare** — 数据获取
-- **Matplotlib / Seaborn** — 可视化
+- `2026-04-25-daily-rotation-design.md` — Daily rotation engine
+- `2026-04-26-daily-rotation-optuna-design.md` — Optuna optimization
+- `2026-04-30-robustness-and-cost-design.md` — Robustness analysis
+- `2026-05-02-ml-optuna-integration-design.md` — ML + Optuna three-stage integration
+- `2026-05-02-qlib-llm-research-and-roadmap.md` — Qlib/RD-Agent research
+- `2026-05-03-temporal-feature-layer-design.md` — Temporal feature layer
 
-## 配置
+## Configuration
 
-数据库连接配置位于 `config/database.ini`，格式如下：
+Database connection in `config/database.ini`:
 
 ```ini
-[database]
+[postgresql]
 host = localhost
 port = 5432
 database = your_db
-username = your_user
+user = your_user
 password = your_pass
 ```
