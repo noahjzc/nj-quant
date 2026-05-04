@@ -46,6 +46,7 @@ import optuna
 from strategy.rotation.config import RotationConfig
 from strategy.rotation.daily_rotation_engine import DailyRotationEngine
 from data.cache.daily_data_cache import DailyDataCache, CachedProvider
+from experiments.recorder import record_experiment
 
 # 默认日志级别设为 WARNING，避免 Optuna 和引擎的 INFO 日志刷屏
 logging.basicConfig(
@@ -463,6 +464,28 @@ def run_single_optimization(
                               output_dir, data_provider, ranker)
     else:
         print("\n跳过稳健性筛选 (--skip-robustness)")
+
+    # 自动记录本次优化实验
+    ranker_type = "SignalRanker"
+    if ranker is not None:
+        type_name = type(ranker).__name__
+        if 'Temporal' in type_name:
+            ranker_type = "TemporalMLRanker"
+        elif 'MLRanker' in type_name or hasattr(ranker, 'model'):
+            ranker_type = "MLRanker"
+
+    record_experiment({
+        "type": "optimization_single",
+        "ranker": ranker_type,
+        "date_range": {"start": start_date, "end": end_date},
+        "metrics": {
+            "sharpe": best_sharpe,
+        },
+        "config": _config_to_dict(best_config),
+        "ranker_config": {
+            "factor_count": len(best_config.rank_factor_weights) if hasattr(best_config, 'rank_factor_weights') else 0,
+        },
+    })
 
     return best_config, best_sharpe, study
 

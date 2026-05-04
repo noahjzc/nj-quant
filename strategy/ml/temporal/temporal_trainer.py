@@ -37,6 +37,17 @@ class TemporalTrainer:
         self.encoder.load_state_dict(ckpt['encoder_state_dict'])
         self.encoder.eval()
 
+        # 加载归一化参数
+        mean = cfg.get('factor_mean')
+        std = cfg.get('factor_std')
+        if mean is not None and std is not None:
+            self.factor_mean = np.array(mean, dtype=np.float32)
+            self.factor_std = np.array(std, dtype=np.float32)
+        else:
+            logger.warning("checkpoint 不含归一化参数，特征提取可能不可靠")
+            self.factor_mean = np.zeros(len(self.factor_columns), dtype=np.float32)
+            self.factor_std = np.ones(len(self.factor_columns), dtype=np.float32)
+
     def train(
         self,
         train_start: str,
@@ -108,6 +119,10 @@ class TemporalTrainer:
                 h = list(history[s])
                 for t_idx in range(min(len(h), self.seq_len)):
                     hist_array[j, self.seq_len - len(h) + t_idx] = h[t_idx]
+
+            # z-score 归一化 (与预训练一致)
+            hist_array = (hist_array - self.factor_mean) / self.factor_std
+            hist_array = np.nan_to_num(hist_array, nan=0.0, posinf=0.0, neginf=0.0)
 
             # Encoder extract
             with torch.no_grad():

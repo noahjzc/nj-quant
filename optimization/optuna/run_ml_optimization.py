@@ -15,7 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from strategy.ml.ml_optuna import run_ml_optimization
+from strategy.ml.ml_optuna import run_ml_optimization, run_temporal_optimization
 from strategy.factors.alpha158 import Alpha158Calculator
 
 
@@ -69,16 +69,19 @@ def main():
         print(f"因子列: {len(factor_columns)} (全量 Alpha158)")
 
     if args.encoder and Path(args.encoder).exists():
-        # 时序模式: Encoder 提取特征 + LightGBM 直接训练（不经过 Optuna）
-        from strategy.ml.temporal.temporal_trainer import TemporalTrainer
-        trainer = TemporalTrainer(args.cache_dir, args.encoder)
-        model_path = trainer.train(
+        # 时序模式: Encoder 提取特征 + Optuna 搜索 LightGBM 超参
+        run_temporal_optimization(
             train_start=args.train_start,
             train_end=args.train_end,
-            output_path=args.output,
+            cache_dir=args.cache_dir,
+            encoder_path=args.encoder,
+            factor_columns=factor_columns,
+            n_trials=args.trials,
+            output_dir=args.output,
+            study_name=args.study_name,
+            storage_url=args.storage,
         )
-        print(f"\n时序增强模型已保存: {model_path}")
-        return  # 时序模式不跑 Optuna，直接结束
+        return
 
     run_ml_optimization(
         train_start=args.train_start,

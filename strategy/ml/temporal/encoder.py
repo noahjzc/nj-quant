@@ -1,5 +1,4 @@
 """时序因子编码器 — 轻量 Transformer Encoder 提取因子时序特征"""
-import math
 import torch
 import torch.nn as nn
 
@@ -39,6 +38,8 @@ class TemporalEncoder(nn.Module):
         dropout: float = 0.1,
     ):
         super().__init__()
+        if d_model % n_heads != 0:
+            raise ValueError(f"d_model ({d_model}) must be divisible by n_heads ({n_heads})")
         self.n_features = n_features
         self.d_model = d_model
 

@@ -71,7 +71,10 @@ class MaskedFactorDataset(Dataset):
         all_data = np.concatenate([s.reshape(-1, len(cols)) for s in self.samples], axis=0)
         self.factor_mean = np.nanmean(all_data, axis=0).astype(np.float32)
         self.factor_std = np.nanstd(all_data, axis=0).astype(np.float32)
-        self.factor_std[self.factor_std < 1e-8] = 1.0  # 避免除零
+        self.factor_std[self.factor_std < 1e-8] = 1.0
+        # 缓存为 tensor，避免 __getitem__ 每轮转换
+        self._mean_t = torch.tensor(self.factor_mean)
+        self._std_t = torch.tensor(self.factor_std)
 
         logger.info(f"预训练数据集: {len(self.samples)} 条序列, "
                      f"{len(cols)} 个因子, {seq_len} 天窗口")
@@ -81,8 +84,7 @@ class MaskedFactorDataset(Dataset):
 
     def __getitem__(self, idx):
         x = torch.tensor(self.samples[idx], dtype=torch.float32)
-        # z-score 归一化
-        x = (x - torch.tensor(self.factor_mean)) / torch.tensor(self.factor_std)
+        x = (x - self._mean_t) / self._std_t
         x = torch.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0)
         # 随机遮罩
         mask = torch.rand(x.shape) < self.mask_ratio
@@ -177,6 +179,7 @@ def pretrain(
     output.parent.mkdir(parents=True, exist_ok=True)
     torch.save({
         'encoder_state_dict': encoder.state_dict(),
+        'pred_head_state_dict': pred_head.state_dict(),
         'config': {
             'n_features': M, 'd_model': d_model, 'n_heads': n_heads,
             'n_layers': n_layers, 'max_len': seq_len,

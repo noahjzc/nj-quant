@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import datetime
 
-from web.server.api import signals, positions, data_browser, cron_status
+from web.server.api import signals, positions, data_browser, cron_status, experiments
 
 app = FastAPI(
     title="NJ Quant Signal Dashboard",
@@ -24,6 +24,7 @@ app.include_router(signals.router, prefix="/signals", tags=["signals"])
 app.include_router(positions.router, prefix="/positions", tags=["positions"])
 app.include_router(data_browser.router, prefix="/data", tags=["data"])
 app.include_router(cron_status.router, prefix="/cron", tags=["cron"])
+app.include_router(experiments.router, prefix="/experiments", tags=["experiments"])
 
 
 @app.get("/health")
