@@ -1,11 +1,12 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { Layout, Menu } from 'antd';
-import { TableOutlined, ShoppingOutlined, DatabaseOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import { TableOutlined, ShoppingOutlined, DatabaseOutlined, ClockCircleOutlined, BarChartOutlined } from '@ant-design/icons';
 import SignalTable from './pages/SignalTable';
 import Positions from './pages/Positions';
 import DataBrowser from './pages/DataBrowser';
 import CronTracker from './pages/CronTracker';
+import Experiments from './pages/Experiments';
 
 const { Header, Content, Footer } = Layout;
 
@@ -26,6 +27,7 @@ const App: React.FC = () => {
               <Route path="/positions" element={<Positions />} />
               <Route path="/data-browser" element={<DataBrowser />} />
               <Route path="/cron-tracker" element={<CronTracker />} />
+              <Route path="/experiments" element={<Experiments />} />
             </Routes>
           </div>
         </Content>
@@ -42,6 +44,7 @@ const MenuWithNavigate: React.FC = () => {
     { key: '/positions', icon: <ShoppingOutlined />, label: '持仓管理' },
     { key: '/data-browser', icon: <DatabaseOutlined />, label: '数据浏览' },
     { key: '/cron-tracker', icon: <ClockCircleOutlined />, label: '定时任务' },
+    { key: '/experiments', icon: <BarChartOutlined />, label: '实验追踪' },
   ];
   return (
     <Menu

@@ -19,6 +19,7 @@ from backtesting.analysis.performance_analyzer import PerformanceAnalyzer
 from backtesting.analysis.visualizer import PerformanceVisualizer
 from data.cache.daily_data_cache import DailyDataCache, CachedProvider
 from optimization.optuna.run_daily_rotation_optimization import _params_to_config
+from experiments.recorder import record_experiment
 
 
 def run(start_date: str, end_date: str, config: RotationConfig = None, verbose: bool = False,
@@ -82,7 +83,7 @@ def run(start_date: str, end_date: str, config: RotationConfig = None, verbose: 
 def _export_results(results, engine, config, start_date, end_date):
     """导出回测结果到时间戳文件夹。"""
     ts = datetime.now().strftime('%Y_%m_%d_%H_%M')
-    out_dir = Path(f'results/{ts}_performance')
+    out_dir = Path(__file__).resolve().parent.parent / f'results/{ts}_performance'
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # ── 1. 构建净值 DataFrame ──
@@ -186,6 +187,45 @@ def _export_results(results, engine, config, start_date, end_date):
     print(f"交易次数: {len(engine.trade_history)}")
     print(f"年化收益: {metrics.get('annual_return', 0):.2%}  Sharpe: {metrics.get('sharpe_ratio', 0):.2f}  最大回撤: {metrics.get('max_drawdown', 0):.2%}")
     print(f"结果已导出: {out_dir}")
+
+    # 自动记录实验
+    ranker_type = "SignalRanker"
+    if hasattr(engine, 'ranker') and engine.ranker is not None:
+        r = engine.ranker
+        type_name = type(r).__name__
+        if 'Temporal' in type_name:
+            ranker_type = "TemporalMLRanker"
+        elif 'MLRanker' in type_name or hasattr(r, 'model'):
+            ranker_type = "MLRanker"
+
+    ranker_factor_count = 0
+    if hasattr(engine, 'ranker') and engine.ranker is not None and hasattr(engine.ranker, 'required_features'):
+        ranker_factor_count = len(engine.ranker.required_features)
+
+    record_experiment({
+        "type": "backtest",
+        "ranker": ranker_type,
+        "date_range": {"start": start_date, "end": end_date},
+        "metrics": {
+            "sharpe": metrics.get('sharpe_ratio', 0),
+            "annual_return": metrics.get('annual_return', 0),
+            "max_drawdown": metrics.get('max_drawdown', 0),
+            "calmar": metrics.get('calmar_ratio', 0),
+            "win_rate": metrics.get('win_rate', 0),
+        },
+        "config": {
+            "max_positions": engine.config.max_positions,
+            "max_total_pct": engine.config.max_total_pct,
+            "max_position_pct": engine.config.max_position_pct,
+            "stop_loss_mult": engine.config.stop_loss_mult,
+            "take_profit_mult": engine.config.take_profit_mult,
+            "trailing_pct": engine.config.trailing_pct,
+            "atr_period": engine.config.atr_period,
+        },
+        "ranker_config": {
+            "factor_count": ranker_factor_count,
+        },
+    })
 
 
 if __name__ == '__main__':
